@@ -1,0 +1,30 @@
+[project]
+name = "wasteflow"
+version = "0.1.0"
+description = "WasteFlow: reinforcement learning for dynamic waste-collection dispatch (DQN, REINFORCE, A2C, PPO with TorchRL)"
+readme = "README.md"
+requires-python = ">=3.12,<3.13"
+dependencies = [
+    "gymnasium==1.4.0",
+    "numpy==2.5.5",
+    # torch / torchrl / tensordict must move together; versions verified on Windows CPU.
+    "torch==2.15.0",
+    "torchrl==0.15.0",
+    "tensordict==0.15.6",
+    "pandas==3.1.1",
+    "matplotlib==3.11.2",
+]
+
+[dependency-groups]
+dev = [
+    "pytest==9.2.0",
+]
+
+[tool.uv]
+package = false
+# The uv cache and the project are often on different drives (e.g. C: vs D:), where hardlinks fail.
+link-mode = "copy"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]
