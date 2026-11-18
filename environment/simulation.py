@@ -260,6 +260,14 @@ class WasteFlowSim:
         self.vehicle_status = np.full(m, VehicleStatus.IDLE, dtype=int)
         self.vehicle_free_at = np.zeros(m)  # planned time the vehicle frees up (inf if out of service)
         self.vehicle_out_of_service = np.zeros(m, dtype=bool)
+        # Last trip of each vehicle, for rendering only (no effect on dynamics). The vehicle leaves
+        # ``route_from`` at ``route_depart_at`` and has covered ``route_end_frac`` of the way to ``route_to`` at
+        # ``route_arrive_at``: 1.0 on arrival (time includes breakdown downtime), less if it broke down for good.
+        self.route_from = np.full(m, FACILITY, dtype=int)
+        self.route_to = np.full(m, FACILITY, dtype=int)
+        self.route_depart_at = np.zeros(m)
+        self.route_arrive_at = np.zeros(m)
+        self.route_end_frac = np.ones(m)
 
         self.stats = EpisodeStats()
         self._events: list[tuple[float, int, int, int]] = []
@@ -339,6 +347,7 @@ class WasteFlowSim:
         travel = self.travel_time(self.vehicle_node[v], dest)
         self.vehicle_target[v] = dest
         self.vehicle_status[v] = VehicleStatus.TRAVELLING
+        self.route_from[v], self.route_to[v], self.route_depart_at[v] = self.vehicle_node[v], dest, t
 
         if travel > 0 and rng.random() < cfg.breakdown_prob_per_trip:
             at = t + rng.uniform(0.0, 1.0) * travel
@@ -346,6 +355,7 @@ class WasteFlowSim:
                 self._step.travel_minutes += at - t
                 self.stats.travel_minutes += at - t
                 self.vehicle_free_at[v] = np.inf
+                self.route_arrive_at[v], self.route_end_frac[v] = at, (at - t) / travel
                 self._push(at, _Ev.BREAKDOWN_PERMANENT, v)
                 return
             downtime = rng.uniform(*cfg.breakdown_downtime_range_min)
@@ -357,6 +367,7 @@ class WasteFlowSim:
         self._step.travel_minutes += travel
         self.stats.travel_minutes += travel
         self.vehicle_free_at[v] = np.inf  # unknown until arrival (service time depends on the load picked up)
+        self.route_arrive_at[v], self.route_end_frac[v] = t + travel + downtime, 1.0
         self._push(t + travel + downtime, _Ev.ARRIVE, v)
 
     # ------------------------------------------------------------------ event loop

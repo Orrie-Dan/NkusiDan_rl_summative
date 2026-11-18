@@ -272,7 +272,9 @@ class WasteFlowEnv(gym.Env):
         scenario: scenario name from ``SCENARIOS`` or a ``ScenarioConfig``.
         reward_config: reward weights (defaults to ``RewardConfig()``).
         verbose: print one line per decision (for the demo video's terminal output).
-        render_mode: ``"human"`` or ``None``.
+        render_mode: ``"human"`` (three.js viewer in the browser, see ``rendering.py``) or ``None``.
+        render_options: keyword arguments for ``rendering.HumanRenderer`` (port, speed, open_browser,
+            wait_for_client_s).
     """
 
     metadata = {"render_modes": ["human"], "render_fps": 4}
@@ -283,6 +285,7 @@ class WasteFlowEnv(gym.Env):
         reward_config: RewardConfig | None = None,
         verbose: bool = False,
         render_mode: str | None = None,
+        render_options: dict | None = None,
     ) -> None:
         if render_mode is not None and render_mode not in self.metadata["render_modes"]:
             raise ValueError(f"unsupported render_mode {render_mode!r}")
@@ -301,6 +304,18 @@ class WasteFlowEnv(gym.Env):
         self.action_space = spaces.Discrete(N_ACTIONS)
         self._episode_return = 0.0
         self._last_line = ""
+        self._last_decision: dict | None = None
+        self._render_options = render_options or {}
+        self._renderer = None  # created on the first human render
+
+    @property
+    def episode_return(self) -> float:
+        return self._episode_return
+
+    @property
+    def last_decision(self) -> dict | None:
+        """The decision that led to the current state (None right after reset); part of the render snapshot."""
+        return self._last_decision
 
     # -------------------------------------------------------------------------------------------------- api
 
@@ -311,10 +326,11 @@ class WasteFlowEnv(gym.Env):
         self.sim.reset(seed=int(self.np_random.integers(2**63 - 1)))
         self._episode_return = 0.0
         self._last_line = ""
+        self._last_decision = None
         obs = self._obs()
         info = {"vehicle": self.sim.deciding_vehicle, "clock": self.sim.clock_str(), "scenario": self.sim.config.name}
         if self.render_mode == "human":
-            self.render()
+            self._get_renderer().reset(self)
         return obs, info
 
     def step(self, action):
@@ -349,6 +365,15 @@ class WasteFlowEnv(gym.Env):
             info["episode_return"] = self._episode_return
 
         self._last_line = self._format_line(pre, reward)
+        self._last_decision = {
+            "vehicle": v,
+            "action": action,
+            "label": action_name(action),
+            "clock": pre["clock"],
+            "t": float(out.start_time),
+            "reward": round(reward, 4),
+            "text": self._last_line,
+        }
         if self.verbose:
             print(self._last_line, flush=True)
             if terminated:
@@ -358,9 +383,28 @@ class WasteFlowEnv(gym.Env):
         return self._obs(), reward, terminated, False, info
 
     def render(self):
-        # Placeholder until card 05 (three.js viewer in environment/rendering.py) replaces it.
-        if self.render_mode == "human" and self._last_line and not self.verbose:
-            print(self._last_line, flush=True)
+        """Push the current state to the three.js viewer (``render_mode="human"``); paces the episode."""
+        if self.render_mode == "human":
+            self._get_renderer().step(self)
+
+    def save_episode(self, path):
+        """Save the episode recorded by the human renderer as a ``wasteflow.episode`` JSON (for replay mode)."""
+        if self._renderer is None:
+            raise RuntimeError("save_episode needs render_mode='human' and a reset() first")
+        return self._renderer.recorder.save(path)
+
+    def close(self):
+        if self._renderer is not None:
+            self._renderer.close()
+            self._renderer = None
+        super().close()
+
+    def _get_renderer(self):
+        if self._renderer is None:
+            from environment.rendering import HumanRenderer  # lazy: training never needs the HTTP server
+
+            self._renderer = HumanRenderer(**self._render_options)
+        return self._renderer
 
     def action_masks(self) -> np.ndarray:
         """Bool mask for the current decision (convenience for baselines and evaluation)."""

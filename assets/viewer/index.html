@@ -1,0 +1,61 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>WasteFlow Viewer</title>
+  <link rel="stylesheet" href="style.css">
+  <script type="importmap">
+    {"imports": {"three": "./vendor/three/three.module.min.js", "three/addons/": "./vendor/three/"}}
+  </script>
+</head>
+<body>
+  <div id="scene"></div>
+
+  <section class="panel" id="hud">
+    <header>
+      <h1>WasteFlow</h1>
+      <span id="mode" class="badge">connecting…</span>
+    </header>
+    <div class="clock-row">
+      <div id="clock">--:--</div>
+      <div class="clock-meta">
+        <div id="scenario">scenario –</div>
+        <div class="progress"><div id="shift-progress"></div></div>
+      </div>
+    </div>
+    <div class="section-title">Traffic</div>
+    <div id="traffic" class="chips"></div>
+    <div class="section-title">Shift KPIs</div>
+    <dl id="kpis" class="kpis"></dl>
+  </section>
+
+  <section class="panel" id="decisions">
+    <div class="section-title">Last decision</div>
+    <div id="last-decision" class="last-decision">waiting for the first decision…</div>
+    <ol id="log" class="log"></ol>
+  </section>
+
+  <section class="panel" id="legend">
+    <div class="legend-row"><span class="swatch gradient"></span>Bin fill 0 → 100 %</div>
+    <div class="legend-row"><span class="swatch ring"></span>Urgent request</div>
+    <div class="legend-row"><span class="swatch broken"></span>Broken-down truck</div>
+    <div id="fleet-legend"></div>
+  </section>
+
+  <section class="panel" id="controls">
+    <button id="play" type="button" title="Play / pause">❚❚</button>
+    <input id="scrub" type="range" min="0" max="480" step="0.5" value="0" aria-label="Simulation time">
+    <select id="speed" aria-label="Playback speed">
+      <option value="5">5 min/s</option>
+      <option value="10" selected>10 min/s</option>
+      <option value="20">20 min/s</option>
+      <option value="40">40 min/s</option>
+      <option value="80">80 min/s</option>
+    </select>
+    <button id="shot" type="button" title="Save a PNG screenshot">PNG</button>
+  </section>
+
+  <script type="module" src="viewer.js"></script>
+</body>
+</html>
