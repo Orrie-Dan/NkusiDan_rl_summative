@@ -5,6 +5,7 @@ Usage:
     uv run main.py random-demo              # random agent in the three.js viewer (live, in the browser)
     uv run main.py replay logs/demo/random_episode.json   # play back a recorded episode
     uv run main.py train dqn --total-frames 100000 --name my_run   # train (flags: training/dqn_training.py)
+    uv run main.py train reinforce --total-frames 100000           # (flags: training/pg_training.py)
     uv run main.py --help                   # list commands
 """
 
@@ -105,7 +106,7 @@ def main() -> int:
     rep.add_argument("--no-browser", action="store_true")
 
     tr = parsers["train"]
-    tr.add_argument("algo", choices=["dqn"], help="algorithm (REINFORCE/A2C/PPO arrive with cards 11-13)")
+    tr.add_argument("algo", choices=["dqn", "reinforce"], help="algorithm (A2C/PPO arrive with cards 12-13)")
     tr.add_argument("flags", nargs=argparse.REMAINDER, help="trainer flags, e.g. --total-frames 100000 --seed 1")
 
     args = parser.parse_args()
@@ -117,9 +118,13 @@ def main() -> int:
     if args.command == "replay":
         return replay(args)
     if args.command == "train":
-        from training import dqn_training
+        if args.algo == "dqn":
+            from training import dqn_training
 
-        return dqn_training.main(args.flags)
+            return dqn_training.main(args.flags)
+        from training import pg_training
+
+        return pg_training.main([args.algo, *args.flags])
 
     print(f"'{args.command}' is not implemented yet: {COMMANDS[args.command]}.")
     return 1

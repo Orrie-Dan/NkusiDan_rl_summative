@@ -2,12 +2,15 @@
 
 - ``make_env``: TorchRL env (GymEnv + mask cast + ActionMask + RewardSum) for a WasteFlow scenario.
 - ``mlp`` / ``make_actor`` / ``make_critic`` / ``make_qnet``: network builders with configurable width/depth.
-- ``masked_argmax`` / ``TorchPolicy``: greedy masked action selection from any obs -> scores network
-  (actor logits or Q-values), wrapped in the ``evaluation.rollout.Policy`` interface.
+- ``masked_argmax`` / ``TorchPolicy``: masked action selection from any obs -> scores network (actor logits or
+  Q-values), wrapped in the ``evaluation.rollout.Policy`` interface. Two modes (``EVAL_MODES``):
+  ``greedy`` (argmax) and ``sample`` (draw from softmax(logits) with an RNG seeded by the episode seed, so
+  evaluation stays reproducible). DQN is evaluated greedy, policy-gradient agents sampled (``RunConfig.eval_mode``;
+  decided 2026-11-19: argmax of a not-yet-converged REINFORCE policy loops on nearby empty bins).
 - ``RunConfig``: run configuration dataclass <-> JSON. Algorithm modules subclass it with their hyperparameters.
 - ``seed_everything``: Python / NumPy / torch seeding and ``torch.set_num_threads(1)``.
-- ``TrainingRun``: output paths, CSV training log, periodic greedy evaluation on validation seeds,
-  best-checkpoint saving and ``summary.json``.
+- ``TrainingRun``: output paths, CSV training log, periodic evaluation on validation seeds (in the run's eval mode;
+  PG runs also log the greedy return), best-checkpoint saving and ``summary.json``.
 
 Output layout (from the brief)::
 
@@ -15,9 +18,9 @@ Output layout (from the brief)::
     models/pg/<algo>_<run_id>/      model.pt  model_final.pt  config.json
     logs/<algo>/<run_id>/           train_log.csv  summary.json  config.json
 
-``model.pt`` is the checkpoint with the best greedy validation return; ``model_final.pt`` is the last one.
-A checkpoint stores only the obs -> scores MLP (actor logits for policy-gradient methods, Q-values for DQN),
-which is all a greedy policy needs, so ``load_policy`` works the same for every algorithm.
+``model.pt`` is the checkpoint with the best validation return; ``model_final.pt`` is the last one.
+A checkpoint stores only the obs -> scores MLP (actor logits for policy-gradient methods, Q-values for DQN) and
+its eval mode, which is all evaluation needs, so ``load_policy`` works the same for every algorithm.
 """
 
 from __future__ import annotations
@@ -56,8 +59,10 @@ ACTIVATIONS: dict[str, type[nn.Module]] = {"tanh": nn.Tanh, "relu": nn.ReLU, "el
 BASE_LOG_COLUMNS = (
     "frames", "updates", "wall_time_s", "episodes", "train_return_mean",
     "eval_return_mean", "eval_return_std", "eval_tonnes_collected", "eval_overflow_bin_minutes",
-    "eval_urgent_service_rate",
+    "eval_urgent_service_rate", "eval_greedy_return_mean",
 )
+
+EVAL_MODES = ("greedy", "sample")
 
 
 # ------------------------------------------------------------------------------------------------------ config
@@ -93,6 +98,11 @@ class RunConfig:
     @property
     def run_id(self) -> str:
         return f"{self.name}_s{self.seed}"
+
+    @property
+    def eval_mode(self) -> str:
+        """How the trained agent acts in evaluation: DQN greedy, policy-gradient agents sampled (seeded)."""
+        return "greedy" if self.algo == "dqn" else "sample"
 
     @property
     def reward_config(self) -> RewardConfig:
@@ -199,14 +209,22 @@ def masked_argmax(scores: torch.Tensor, mask: torch.Tensor) -> torch.Tensor:
 
 
 class TorchPolicy:
-    """Greedy masked policy around an obs -> scores network; implements ``evaluation.rollout.Policy``."""
+    """Masked policy around an obs -> scores network; implements ``evaluation.rollout.Policy``.
 
-    def __init__(self, net: nn.Module, name: str = "agent") -> None:
+    ``mode="greedy"``: argmax over valid actions. ``mode="sample"``: draw from softmax(scores) over valid actions,
+    with a generator re-seeded by ``reset(seed)``, so the same episode seed always gives the same actions.
+    """
+
+    def __init__(self, net: nn.Module, name: str = "agent", mode: str = "greedy") -> None:
+        if mode not in EVAL_MODES:
+            raise ValueError(f"mode must be one of {EVAL_MODES}")
         self.net = net
         self.name = name
+        self.mode = mode
+        self._gen = torch.Generator().manual_seed(0)
 
     def reset(self, seed: int | None = None) -> None:
-        pass  # greedy: deterministic
+        self._gen = torch.Generator().manual_seed(0 if seed is None else int(seed))
 
     @torch.no_grad()
     def act(self, obs: dict, env: WasteFlowEnv | None = None) -> int:
@@ -215,16 +233,28 @@ class TorchPolicy:
         was_training = self.net.training
         self.net.eval()
         try:
-            return int(masked_argmax(self.net(x), mask).item())
+            scores = self.net(x)
         finally:
             self.net.train(was_training)
+        if self.mode == "greedy":
+            return int(masked_argmax(scores, mask).item())
+        if not bool(mask.any()):
+            raise ValueError("every mask row needs at least one valid action")
+        probs = torch.softmax(scores.masked_fill(~mask, float("-inf")), dim=-1)
+        return int(torch.multinomial(probs[0], 1, generator=self._gen).item())
+
+
+def evaluate_net(net: nn.Module, scenario: str, seeds, reward_config: RewardConfig | None = None,
+                 mode: str = "greedy") -> list[dict]:
+    """KPI rows (see ``evaluation.rollout.run_episode``) for the policy of ``net`` in ``mode`` on ``seeds``."""
+    env = WasteFlowEnv(scenario, reward_config=reward_config)
+    policy = TorchPolicy(net, mode=mode)
+    return [run_episode(env, policy, s) for s in seeds]
 
 
 def greedy_evaluate(net: nn.Module, scenario: str, seeds, reward_config: RewardConfig | None = None) -> list[dict]:
-    """KPI rows (see ``evaluation.rollout.run_episode``) for the greedy policy of ``net`` on ``seeds``."""
-    env = WasteFlowEnv(scenario, reward_config=reward_config)
-    policy = TorchPolicy(net)
-    return [run_episode(env, policy, s) for s in seeds]
+    """``evaluate_net`` in greedy mode (kept for existing callers)."""
+    return evaluate_net(net, scenario, seeds, reward_config, mode="greedy")
 
 
 # --------------------------------------------------------------------------------------------- checkpointing
@@ -251,20 +281,25 @@ def save_checkpoint(path: Path, net: nn.Module, config: RunConfig, frames: int, 
             "n_actions": N_ACTIONS,
             "frames": frames,
             "eval_return": eval_return,
+            "eval_mode": config.eval_mode,
         },
         path,
     )
 
 
-def load_policy(path: str | Path, name: str | None = None) -> TorchPolicy:
-    """Greedy policy from a ``model.pt`` written by any of the four trainers."""
+def load_policy(path: str | Path, name: str | None = None, mode: str | None = None) -> TorchPolicy:
+    """Policy from a ``model.pt`` written by any of the four trainers.
+
+    Acts in the checkpoint's eval mode (greedy for DQN, sampled for policy-gradient agents; checkpoints written
+    before eval modes existed are greedy) unless ``mode`` overrides it.
+    """
     ckpt = torch.load(Path(path), map_location="cpu", weights_only=True)
     if ckpt["obs_dim"] != OBS_DIM or ckpt["n_actions"] != N_ACTIONS:
         raise ValueError(f"checkpoint was trained for obs_dim={ckpt['obs_dim']}, n_actions={ckpt['n_actions']}")
     net = mlp(N_ACTIONS, ckpt["hidden_sizes"], ckpt["activation"])
     net.load_state_dict(ckpt["state_dict"])
     net.eval()
-    return TorchPolicy(net, name=name or ckpt["algo"])
+    return TorchPolicy(net, name=name or ckpt["algo"], mode=mode or ckpt.get("eval_mode", "greedy"))
 
 
 # ----------------------------------------------------------------------------------------------- training run
@@ -335,13 +370,23 @@ class TrainingRun:
         return row
 
     def maybe_evaluate(self, frames: int, net: nn.Module, force: bool = False) -> dict | None:
-        """Greedy evaluation every ``eval_every_frames`` frames; saves ``model.pt`` when the return improves."""
+        """Evaluate in the run's eval mode every ``eval_every_frames`` frames; saves ``model.pt`` on improvement.
+
+        Sampled (policy-gradient) runs also record the greedy return as ``eval_greedy_return_mean`` (logged for the
+        report, never used for selection).
+        """
         if not force and frames < self._next_eval:
             return None
         self._next_eval = frames + self.config.eval_every_frames
         cfg = self.config
-        rows = greedy_evaluate(net, cfg.scenario, VALIDATION_SEEDS[: cfg.eval_episodes], cfg.reward_config)
+        seeds = VALIDATION_SEEDS[: cfg.eval_episodes]
+        rows = evaluate_net(net, cfg.scenario, seeds, cfg.reward_config, mode=cfg.eval_mode)
         returns = [r["return"] for r in rows]
+        if cfg.eval_mode == "greedy":
+            greedy_mean = float(np.mean(returns))
+        else:
+            greedy_mean = float(np.mean([r["return"] for r in
+                                         evaluate_net(net, cfg.scenario, seeds, cfg.reward_config, mode="greedy")]))
         result = {
             "frames": frames,
             "eval_return_mean": float(np.mean(returns)),
@@ -349,6 +394,7 @@ class TrainingRun:
             "eval_tonnes_collected": float(np.mean([r["tonnes_collected"] for r in rows])),
             "eval_overflow_bin_minutes": float(np.mean([r["overflow_bin_minutes"] for r in rows])),
             "eval_urgent_service_rate": float(np.mean([r["urgent_service_rate"] for r in rows])),
+            "eval_greedy_return_mean": greedy_mean,
         }
         self.eval_history.append(result)
         self._csv.writerow({"frames": frames, "wall_time_s": round(self.wall_time, 2), "episodes": self._episodes,
@@ -371,6 +417,7 @@ class TrainingRun:
             "name": self.config.name,
             "seed": self.config.seed,
             "scenario": self.config.scenario,
+            "eval_mode": self.config.eval_mode,
             "frames": frames,
             "episodes": self._episodes,
             "wall_time_s": round(self.wall_time, 1),
@@ -386,6 +433,31 @@ class TrainingRun:
         }
         (self.log_dir / "summary.json").write_text(json.dumps(summary, indent=2), encoding="utf-8")
         return summary
+
+
+def parse_run_config(cls: type[RunConfig], argv=None, description: str = "") -> tuple[RunConfig, str]:
+    """CLI for a trainer: ``--config file.json`` plus one ``--flag`` per config field (flags override the file).
+
+    Returns (config, root). ``--hidden-sizes`` takes a comma-separated list; ``reward`` only comes via the file.
+    """
+    import argparse
+
+    p = argparse.ArgumentParser(description=description)
+    p.add_argument("--config", help=f"JSON file with {cls.__name__} fields; CLI flags below override it")
+    p.add_argument("--root", default=".", help="directory that receives models/ and logs/")
+    simple = {f.name: f.type for f in fields(cls) if f.name not in ("algo", "reward", "hidden_sizes")}
+    for name, typ in simple.items():
+        flag = "--" + name.replace("_", "-")
+        if typ in ("bool", bool):
+            p.add_argument(flag, type=lambda s: s.lower() in ("1", "true", "yes"), default=None)
+        else:
+            p.add_argument(flag, type={"int": int, "float": float}.get(str(typ), str), default=None)
+    p.add_argument("--hidden-sizes", type=lambda s: [int(x) for x in s.split(",")], default=None,
+                   help="comma-separated, e.g. 128,128")
+    args = p.parse_args(argv)
+    base = json.loads(Path(args.config).read_text(encoding="utf-8")) if args.config else {}
+    overrides = {k: v for k, v in vars(args).items() if k not in ("config", "root") and v is not None}
+    return cls.from_dict({**base, **overrides}), args.root
 
 
 def dummy_run(root: str | Path = ".", algo: str = "ppo", total_frames: int = 2_000, seed: int = 0) -> dict:

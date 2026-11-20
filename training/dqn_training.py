@@ -20,9 +20,7 @@ Usage::
 
 from __future__ import annotations
 
-import argparse
-import json
-from dataclasses import dataclass, fields
+from dataclasses import dataclass
 from pathlib import Path
 
 import torch
@@ -38,6 +36,7 @@ from training.common import (
     completed_episode_returns,
     make_env,
     make_qnet,
+    parse_run_config,
     seed_everything,
 )
 
@@ -169,22 +168,7 @@ def train(cfg: DQNConfig, root: str | Path = ".") -> dict:
 
 
 def _parse(argv=None) -> tuple[DQNConfig, str]:
-    p = argparse.ArgumentParser(description="Train DQN on WasteFlow")
-    p.add_argument("--config", help="JSON file with DQNConfig fields; CLI flags below override it")
-    p.add_argument("--root", default=".", help="directory that receives models/ and logs/")
-    simple = {f.name: f.type for f in fields(DQNConfig) if f.name not in ("algo", "reward", "hidden_sizes")}
-    for name, typ in simple.items():
-        flag = "--" + name.replace("_", "-")
-        if typ in ("bool", bool):
-            p.add_argument(flag, type=lambda s: s.lower() in ("1", "true", "yes"), default=None)
-        else:
-            p.add_argument(flag, type={"int": int, "float": float}.get(str(typ), str), default=None)
-    p.add_argument("--hidden-sizes", type=lambda s: [int(x) for x in s.split(",")], default=None,
-                   help="comma-separated, e.g. 128,128")
-    args = p.parse_args(argv)
-    base = json.loads(Path(args.config).read_text(encoding="utf-8")) if args.config else {}
-    overrides = {k: v for k, v in vars(args).items() if k not in ("config", "root") and v is not None}
-    return DQNConfig.from_dict({**base, **overrides}), args.root
+    return parse_run_config(DQNConfig, argv, "Train DQN on WasteFlow")
 
 
 def main(argv=None) -> int:

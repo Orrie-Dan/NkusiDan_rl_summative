@@ -194,7 +194,7 @@ def test_checkpoint_roundtrip_gives_identical_greedy_actions(tmp_path):
     net = mlp(N_ACTIONS, [32, 32], "elu")
     cfg = RunConfig(algo="a2c", hidden_sizes=[32, 32], activation="elu")
     save_checkpoint(tmp_path / "m.pt", net, cfg, frames=10, eval_return=1.0)
-    loaded = load_policy(tmp_path / "m.pt")
+    loaded = load_policy(tmp_path / "m.pt", mode="greedy")  # a2c checkpoints default to sampling
     original = TorchPolicy(net)
     env = WasteFlowEnv()
     obs, _ = env.reset(seed=3)
@@ -207,14 +207,94 @@ def test_checkpoint_roundtrip_gives_identical_greedy_actions(tmp_path):
     assert loaded.name == "a2c"
 
 
+def test_sampled_policy_is_valid_reproducible_per_seed_and_stochastic():
+    class Flat(nn.Module):  # equal scores everywhere, invalid bin 0 boosted
+        def forward(self, x):
+            s = torch.zeros(x.shape[0], N_ACTIONS)
+            s[:, 0] = 100.0
+            return s
+
+    def actions(policy, seed, steps=40):
+        env = WasteFlowEnv()
+        policy.reset(seed)
+        obs, _ = env.reset(seed=seed)
+        out = []
+        for _ in range(steps):
+            a = policy.act(obs, env)
+            assert obs["action_mask"][a], "sampled an invalid action"
+            out.append(a)
+            obs, _, done, _, _ = env.step(a)
+            if done:
+                break
+        return out
+
+    policy = TorchPolicy(Flat(), mode="sample")
+    assert actions(policy, 7) == actions(policy, 7)  # same seed -> same episode
+    assert actions(policy, 7) != actions(policy, 8)
+    assert len(set(actions(policy, 7))) > 1  # not deterministic over steps
+    with pytest.raises(ValueError):
+        TorchPolicy(Flat(), mode="epsilon")
+
+
+def test_sampled_policy_follows_the_softmax():
+    net = nn.Linear(OBS_DIM, N_ACTIONS)
+    with torch.no_grad():
+        net.weight.zero_()
+        net.bias.zero_()
+        net.bias[1] = float(np.log(3.0))  # among valid {1, 2}: P(1) = 0.75
+    policy = TorchPolicy(net, mode="sample")
+    policy.reset(0)
+    mask = np.zeros(N_ACTIONS, dtype=np.int8)
+    mask[[1, 2]] = 1
+    obs = {"observation": np.zeros(OBS_DIM, dtype=np.float32), "action_mask": mask}
+    draws = [policy.act(obs) for _ in range(4000)]
+    assert set(draws) == {1, 2}
+    assert abs(draws.count(1) / len(draws) - 0.75) < 0.03
+
+
+def test_checkpoint_eval_mode_follows_the_algorithm(tmp_path):
+    net = mlp(N_ACTIONS, [8])
+    for algo, mode in (("dqn", "greedy"), ("reinforce", "sample"), ("ppo", "sample")):
+        save_checkpoint(tmp_path / f"{algo}.pt", net, RunConfig(algo=algo, hidden_sizes=[8]), 0, None)
+        assert load_policy(tmp_path / f"{algo}.pt").mode == mode
+    assert load_policy(tmp_path / "ppo.pt", mode="greedy").mode == "greedy"  # explicit override
+    old = torch.load(tmp_path / "ppo.pt", weights_only=True)
+    del old["eval_mode"]  # checkpoint written before eval modes existed
+    torch.save(old, tmp_path / "old.pt")
+    assert load_policy(tmp_path / "old.pt").mode == "greedy"
+
+
+def test_sampled_runs_select_on_sampled_return_and_also_log_greedy(tmp_path, monkeypatch):
+    calls = []
+
+    def fake(net, scenario, seeds, rc=None, mode="greedy"):
+        calls.append(mode)
+        return [{"return": 10.0 if mode == "sample" else -5.0, "tonnes_collected": 1.0,
+                 "overflow_bin_minutes": 0.0, "urgent_service_rate": 1.0}]
+
+    monkeypatch.setattr(common, "evaluate_net", fake)
+    run = TrainingRun(RunConfig(algo="reinforce", name="t", eval_episodes=1), metric_columns=[], root=tmp_path)
+    result = run.maybe_evaluate(0, mlp(N_ACTIONS, [8]))
+    assert calls == ["sample", "greedy"]
+    assert result["eval_return_mean"] == 10.0 and result["eval_greedy_return_mean"] == -5.0
+    assert run.best_eval_return == 10.0
+    assert torch.load(run.model_dir / "model.pt", weights_only=True)["eval_mode"] == "sample"
+
+    calls.clear()
+    dqn = TrainingRun(RunConfig(algo="dqn", name="t", eval_episodes=1), metric_columns=[], root=tmp_path)
+    assert dqn.maybe_evaluate(0, mlp(N_ACTIONS, [8]))["eval_greedy_return_mean"] == -5.0
+    assert calls == ["greedy"]  # greedy runs evaluate once
+
+
 # ----------------------------------------------------------------------------------------------- training run
 
 
 def test_training_run_keeps_the_best_checkpoint_and_rejects_unknown_metrics(tmp_path, monkeypatch):
     returns = iter([5.0, 2.0, 9.0, 1.0])
-    monkeypatch.setattr(common, "greedy_evaluate",
-                        lambda net, scenario, seeds, rc=None: [{"return": next(returns), "tonnes_collected": 1.0,
-                                                                "overflow_bin_minutes": 0.0, "urgent_service_rate": 1.0}])
+    monkeypatch.setattr(common, "evaluate_net",
+                        lambda net, scenario, seeds, rc=None, mode="greedy": [
+                            {"return": next(returns), "tonnes_collected": 1.0, "overflow_bin_minutes": 0.0,
+                             "urgent_service_rate": 1.0}])
     cfg = RunConfig(algo="dqn", name="t", eval_every_frames=100, eval_episodes=1)
     run = TrainingRun(cfg, metric_columns=["loss"], root=tmp_path)
     with pytest.raises(ValueError):
