@@ -21,14 +21,20 @@ Usage::
     uv run python -m training.pg_training reinforce --total-frames 100000 --name reinforce_smoke
     uv run python -m training.pg_training reinforce --config path/to/config.json
     uv run python -m training.pg_training a2c --total-frames 100000 --name a2c_smoke
+    uv run python -m training.pg_training ppo --total-frames 100000 --name ppo_smoke
 
 A2C (card 12): TorchRL ``A2CLoss`` + ``GAE`` on ``Collector`` batches of ``frames_per_batch`` decisions, one
 gradient step per batch, separate actor and critic MLPs, one Adam optimizer, gradient-norm clipping
 (see ``train_a2c``).
+
+PPO (card 13): TorchRL ``ClipPPOLoss`` + ``GAE``; each rollout of ``frames_per_batch`` decisions is reused for
+``num_epochs`` passes of shuffled minibatches through a replay buffer, with optional linear lr annealing
+(see ``train_ppo``).
 """
 
 from __future__ import annotations
 
+import math
 import sys
 from dataclasses import dataclass
 from pathlib import Path
@@ -36,9 +42,11 @@ from pathlib import Path
 import torch
 from tensordict import TensorDict
 from torchrl.collectors import Collector
+from torchrl.data import LazyTensorStorage, TensorDictReplayBuffer
+from torchrl.data.replay_buffers.samplers import SamplerWithoutReplacement
 from torchrl.envs.utils import ExplorationType, set_exploration_type
 from torchrl.modules import MaskedCategorical
-from torchrl.objectives import A2CLoss
+from torchrl.objectives import A2CLoss, ClipPPOLoss
 from torchrl.objectives.value import GAE
 
 from training.common import (
@@ -283,15 +291,135 @@ def train_a2c(cfg: A2CConfig, root: str | Path = ".") -> dict:
     return run.finish(logits_net, frames, extra={"updates": updates})
 
 
+# ----------------------------------------------------------------------------------------------------- PPO
+
+PPO_METRIC_COLUMNS = ["policy_loss", "entropy", "value_loss", "kl_approx", "clip_fraction", "advantage_std",
+                      "explained_variance", "grad_norm", "lr"]
+
+
+@dataclass
+class PPOConfig(RunConfig):
+    algo: str = "ppo"
+    lr: float = 3e-4
+    frames_per_batch: int = 1_024  # rollout: decisions collected per PPO iteration (~18 shifts)
+    num_epochs: int = 4  # passes over each rollout
+    minibatch_size: int = 128
+    clip_epsilon: float = 0.2
+    gae_lambda: float = 0.95
+    entropy_coef: float = 0.01
+    value_coef: float = 0.5
+    loss_critic_type: str = "smooth_l1"
+    normalize_advantages: bool = True  # over the whole rollout (GAE ``average_gae``), as in A2C
+    anneal_lr: bool = False  # linear decay from lr to 0 over the run, stepped once per rollout
+    max_grad_norm: float = 0.5
+
+    def __post_init__(self) -> None:
+        super().__post_init__()
+        if self.algo != "ppo":
+            raise ValueError("PPOConfig.algo must be 'ppo'")
+        if not 0.0 < self.clip_epsilon < 1.0:
+            raise ValueError("clip_epsilon must be in (0, 1)")
+        if not 0.0 <= self.gae_lambda <= 1.0:
+            raise ValueError("gae_lambda must be in [0, 1]")
+        if self.entropy_coef < 0 or self.value_coef <= 0:
+            raise ValueError("need entropy_coef >= 0 and value_coef > 0")
+        if self.loss_critic_type not in CRITIC_LOSSES:
+            raise ValueError(f"loss_critic_type must be one of {CRITIC_LOSSES}")
+        if self.num_epochs < 1 or not 1 <= self.minibatch_size <= self.frames_per_batch:
+            raise ValueError("need num_epochs >= 1 and 1 <= minibatch_size <= frames_per_batch")
+        if self.max_grad_norm <= 0:
+            raise ValueError("max_grad_norm must be > 0")
+
+    @property
+    def minibatches_per_epoch(self) -> int:
+        return self.frames_per_batch // self.minibatch_size  # a remainder of the shuffled rollout is skipped
+
+
+def train_ppo(cfg: PPOConfig, root: str | Path = ".") -> dict:
+    """Train one PPO run and return its summary (also written to logs/ppo/<run_id>/summary.json).
+
+    Per rollout of ``frames_per_batch`` decisions: GAE(gamma, lambda) advantages and value targets from the critic
+    as it was at collection time, then ``num_epochs`` passes over the rollout in shuffled minibatches
+    (``SamplerWithoutReplacement``) of the clipped surrogate ``ClipPPOLoss`` (+ value_coef * critic loss
+    - entropy_coef * entropy), one clipped Adam step per minibatch. ``action_log_prob`` stored by the collector is
+    the behaviour policy for the importance ratio.
+    """
+    seed_everything(cfg.seed)
+    env = make_env(cfg.scenario, cfg.seed, cfg.reward_config)
+    actor, logits_net = make_actor(env.action_spec, cfg.hidden_sizes, cfg.activation)
+    critic = make_critic(cfg.hidden_sizes, cfg.activation)
+    advantage = GAE(gamma=cfg.gamma, lmbda=cfg.gae_lambda, value_network=critic,
+                    average_gae=cfg.normalize_advantages)
+    loss_module = ClipPPOLoss(actor, critic, clip_epsilon=cfg.clip_epsilon, entropy_coeff=cfg.entropy_coef,
+                              critic_coeff=cfg.value_coef, loss_critic_type=cfg.loss_critic_type)
+    optimizer = torch.optim.Adam(loss_module.parameters(), lr=cfg.lr)
+    n_rollouts = math.ceil(cfg.total_frames / cfg.frames_per_batch)
+    scheduler = torch.optim.lr_scheduler.LambdaLR(
+        optimizer, lambda i: max(0.0, 1.0 - i / n_rollouts) if cfg.anneal_lr else 1.0)
+    buffer = TensorDictReplayBuffer(storage=LazyTensorStorage(cfg.frames_per_batch),
+                                    sampler=SamplerWithoutReplacement(), batch_size=cfg.minibatch_size)
+    collector = Collector(env, actor, frames_per_batch=cfg.frames_per_batch, total_frames=cfg.total_frames,
+                          auto_register_policy_transforms=False)
+
+    run = TrainingRun(cfg, metric_columns=PPO_METRIC_COLUMNS, root=root)
+    frames, updates = 0, 0
+    try:
+        run.maybe_evaluate(0, logits_net)  # untrained reference point
+        for batch in collector:
+            frames += batch.numel()
+            lr = optimizer.param_groups[0]["lr"]  # lr used for this rollout's updates
+            with torch.no_grad():
+                advantage(batch)  # writes "advantage", "value_target" and "state_value"
+            buffer.empty()
+            buffer.extend(batch.reshape(-1))
+
+            stats = {k: [] for k in ("loss_objective", "entropy", "loss_critic", "kl_approx", "clip_fraction")}
+            grad_norms = []
+            for _ in range(cfg.num_epochs):
+                for _ in range(cfg.minibatches_per_epoch):
+                    out = loss_module(buffer.sample())
+                    loss = sum(v for k, v in out.items() if k.startswith("loss_"))
+                    optimizer.zero_grad()
+                    loss.backward()
+                    grad_norms.append(torch.nn.utils.clip_grad_norm_(loss_module.parameters(), cfg.max_grad_norm))
+                    optimizer.step()
+                    updates += 1
+                    for k in stats:
+                        stats[k].append(out[k].detach())
+            scheduler.step()
+
+            mean = {k: torch.stack(v).mean() for k, v in stats.items()}
+            run.log(
+                frames,
+                updates=updates,
+                episode_returns=completed_episode_returns(batch),
+                policy_loss=mean["loss_objective"],
+                entropy=mean["entropy"],
+                value_loss=mean["loss_critic"] / cfg.value_coef,  # unweighted critic loss
+                kl_approx=mean["kl_approx"],
+                clip_fraction=mean["clip_fraction"],
+                advantage_std=batch["advantage"].std(),
+                explained_variance=explained_variance(batch["state_value"], batch["value_target"]),
+                grad_norm=torch.stack(grad_norms).mean(),
+                lr=lr,
+            )
+            run.maybe_evaluate(frames, logits_net)
+    finally:
+        collector.shutdown()
+        env.close()
+    return run.finish(logits_net, frames, extra={"updates": updates})
+
+
 # ----------------------------------------------------------------------------------------------------- CLI
 
-TRAINERS = {"reinforce": (ReinforceConfig, train_reinforce), "a2c": (A2CConfig, train_a2c)}
+TRAINERS = {"reinforce": (ReinforceConfig, train_reinforce), "a2c": (A2CConfig, train_a2c),
+            "ppo": (PPOConfig, train_ppo)}
 
 
 def main(argv=None) -> int:
     argv = list(sys.argv[1:] if argv is None else argv)
     if not argv or argv[0] not in TRAINERS:
-        print(f"usage: python -m training.pg_training {{{','.join(TRAINERS)}}} [--flags]  (PPO: card 13)")
+        print(f"usage: python -m training.pg_training {{{','.join(TRAINERS)}}} [--flags]")
         return 2
     algo, flags = argv[0], argv[1:]
     config_cls, trainer = TRAINERS[algo]
