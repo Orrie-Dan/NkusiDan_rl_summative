@@ -8,6 +8,9 @@ Usage:
     uv run main.py train reinforce --total-frames 100000           # (flags: training/pg_training.py)
     uv run main.py train a2c --total-frames 100000                 # (flags: training/pg_training.py)
     uv run main.py train ppo --total-frames 100000                 # (flags: training/pg_training.py)
+    uv run main.py sweep --list             # the 40 sweep configs (training/sweep.py)
+    uv run main.py sweep                    # Phase 1 sweep: 40 runs in parallel, resumable
+    uv run main.py sweep --dry-run          # same 40 configs with tiny budgets, into logs/_scratch/
     uv run main.py --help                   # list commands
 """
 
@@ -91,7 +94,9 @@ def replay(args: argparse.Namespace) -> int:
 def main() -> int:
     parser = argparse.ArgumentParser(description="WasteFlow RL summative")
     sub = parser.add_subparsers(dest="command")
-    parsers = {name: sub.add_parser(name, help=help_text) for name, help_text in COMMANDS.items()}
+    # `sweep --help` is answered by training/sweep.py, so its subparser has no -h of its own
+    parsers = {name: sub.add_parser(name, help=help_text, add_help=name != "sweep")
+               for name, help_text in COMMANDS.items()}
 
     demo = parsers["random-demo"]
     demo.add_argument("--scenario", default="base")
@@ -111,7 +116,14 @@ def main() -> int:
     tr.add_argument("algo", choices=["dqn", "reinforce", "a2c", "ppo"], help="algorithm to train")
     tr.add_argument("flags", nargs=argparse.REMAINDER, help="trainer flags, e.g. --total-frames 100000 --seed 1")
 
-    args = parser.parse_args()
+    # `sweep` passes every flag through (REMAINDER cannot capture flags that come first)
+    args, extra = parser.parse_known_args()
+    if args.command == "sweep":
+        from training import sweep
+
+        return sweep.main(extra)
+    if extra:
+        parser.error(f"unrecognized arguments: {' '.join(extra)}")
     if args.command is None:
         print_status()
         return 0
