@@ -11,6 +11,8 @@ Usage:
     uv run main.py sweep --list             # the 40 sweep configs (training/sweep.py)
     uv run main.py sweep                    # Phase 1 sweep: 40 runs in parallel, resumable
     uv run main.py sweep --dry-run          # same 40 configs with tiny budgets, into logs/_scratch/
+    uv run main.py evaluate                 # KPI table (mean + 95% CI) for the baselines (evaluation/harness.py)
+    uv run main.py evaluate --scenarios all --policies urgency_first,ppo=models/pg/<run>/model.pt
     uv run main.py --help                   # list commands
 """
 
@@ -25,6 +27,7 @@ COMMANDS = {
     "random-demo": "Run a random agent in the three.js viewer (card 05)",
     "replay": "Play back a recorded episode JSON in the three.js viewer (card 05)",
 }
+PASSTHROUGH = ("sweep", "evaluate")  # commands whose flags are parsed by their own module
 
 
 def print_status() -> None:
@@ -94,8 +97,8 @@ def replay(args: argparse.Namespace) -> int:
 def main() -> int:
     parser = argparse.ArgumentParser(description="WasteFlow RL summative")
     sub = parser.add_subparsers(dest="command")
-    # `sweep --help` is answered by training/sweep.py, so its subparser has no -h of its own
-    parsers = {name: sub.add_parser(name, help=help_text, add_help=name != "sweep")
+    # passthrough commands answer --help themselves, so their subparsers have no -h of their own
+    parsers = {name: sub.add_parser(name, help=help_text, add_help=name not in PASSTHROUGH)
                for name, help_text in COMMANDS.items()}
 
     demo = parsers["random-demo"]
@@ -116,12 +119,16 @@ def main() -> int:
     tr.add_argument("algo", choices=["dqn", "reinforce", "a2c", "ppo"], help="algorithm to train")
     tr.add_argument("flags", nargs=argparse.REMAINDER, help="trainer flags, e.g. --total-frames 100000 --seed 1")
 
-    # `sweep` passes every flag through (REMAINDER cannot capture flags that come first)
+    # passthrough commands get every flag (REMAINDER cannot capture flags that come first)
     args, extra = parser.parse_known_args()
     if args.command == "sweep":
         from training import sweep
 
         return sweep.main(extra)
+    if args.command == "evaluate":
+        from evaluation import harness
+
+        return harness.main(extra)
     if extra:
         parser.error(f"unrecognized arguments: {' '.join(extra)}")
     if args.command is None:
