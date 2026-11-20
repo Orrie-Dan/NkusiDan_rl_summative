@@ -46,6 +46,7 @@ import numpy as np
 import pandas as pd
 
 from baselines.heuristics import HEURISTICS
+from baselines.rolling_horizon import RollingHorizonPolicy
 from environment.custom_env import REWARD_COMPONENTS, RewardConfig, WasteFlowEnv
 from environment.simulation import ACTION_WAIT, SCENARIOS, VehicleStatus
 from evaluation.rollout import EVAL_SEEDS, Policy, run_episode
@@ -55,6 +56,8 @@ CI_LEVEL = 0.95
 BOOTSTRAP_SEED = 0
 DEFAULT_REFERENCE = "urgency_first"
 DEFAULT_OUT = Path("logs") / "eval" / "baselines"
+# Every non-learning baseline: the card 07 heuristics plus the card 08 rolling-horizon planner.
+BASELINES = {**HEURISTICS, RollingHorizonPolicy.name: RollingHorizonPolicy}
 
 # Summary KPIs, in table order. "Higher is better" matters only for reading; nothing here ranks policies.
 KPIS: tuple[str, ...] = (
@@ -92,12 +95,12 @@ class RecordingPolicy:
 
 def make_policy(spec: str) -> Policy:
     """Policy from a spec: a baseline name (``urgency_first``), a checkpoint path, or ``label=path``."""
-    if spec in HEURISTICS:
-        return HEURISTICS[spec]()
+    if spec in BASELINES:
+        return BASELINES[spec]()
     label, _, path = spec.rpartition("=")
     path_ = Path(path)
     if not path_.is_file():
-        raise ValueError(f"{spec!r} is neither a baseline ({', '.join(HEURISTICS)}) nor an existing checkpoint")
+        raise ValueError(f"{spec!r} is neither a baseline ({', '.join(BASELINES)}) nor an existing checkpoint")
     from training.common import load_policy  # torch import only when a checkpoint is evaluated
 
     # model.pt lives in models/dqn/<run_id>/ or models/pg/<algo>_<run_id>/: the folder names the run
@@ -247,7 +250,7 @@ def format_summary(summary: pd.DataFrame, kpis: Sequence[str] = KPIS) -> str:
 
 def main(argv=None) -> int:
     p = argparse.ArgumentParser(description="Evaluate policies on the 50 fixed eval seeds (card 16)")
-    p.add_argument("--policies", type=lambda s: s.split(","), default=list(HEURISTICS),
+    p.add_argument("--policies", type=lambda s: s.split(","), default=list(BASELINES),
                    help="comma-separated baseline names and/or [label=]path/to/model.pt (default: all baselines)")
     p.add_argument("--scenarios", default="base", help=f"comma-separated, or 'all' ({', '.join(SCENARIOS)})")
     p.add_argument("--episodes", type=int, default=len(EVAL_SEEDS), help="first N eval seeds (default: all 50)")
