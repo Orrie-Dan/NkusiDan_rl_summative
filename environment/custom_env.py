@@ -87,7 +87,7 @@ def reward_components(out: StepOutcome, rc: RewardConfig) -> dict[str, float]:
 
 # Fixed normalisation constants. They don't depend on the scenario, so a policy trained on one scenario
 # sees the same encoding when it is evaluated on another (generalisation runs).
-MAX_FILL_RATE_PER_HOUR = 0.5  # clip for the expected fill rate (fraction of bin per hour)
+MAX_FILL_RATE_PER_HOUR = 0.6  # clip for the expected fill rate; high_demand peaks at 0.22 * 1.875 * 1.45 = 0.598
 N_ZONES = ScenarioConfig().n_zones  # zone count is part of the fixed layout
 
 

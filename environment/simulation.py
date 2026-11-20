@@ -89,12 +89,13 @@ class ScenarioConfig:
     n_zones: int = 3
     road_factor: float = 1.35  # road distance / straight-line distance
     bin_capacity_kg_range: tuple[float, float] = (400.0, 1200.0)
-    # Fraction of the bin per hour, before the demand curve. (0.10, 0.22) gives a greedy dispatcher a little
-    # overflow in the base scenario and real pressure in high_demand (provisional; card 14 calibrates).
+    # Fraction of the bin per hour, before the demand curve and demand_multiplier.
     fill_rate_range: tuple[float, float] = (0.10, 0.22)
 
-    # Demand
-    demand_multiplier: float = 1.0
+    # Demand. Card 14 calibration (env v1.0, 2026-11-20): at 1.0 urgency-first left almost no overflow, so
+    # there was no room for RL on that KPI; at 1.25 random is clearly worst, the two heuristics differ on
+    # return, and both still overflow; at 1.5 the two heuristics tied.
+    demand_multiplier: float = 1.25
     initial_fill_range: tuple[float, float] = (0.10, 0.55)
     fill_noise_sigma: float = 0.25  # lognormal sigma of the per-tick rate multiplier (mean 1)
     urgent_rate_per_hour: float = 1.0
@@ -127,7 +128,7 @@ class ScenarioConfig:
 
 SCENARIOS: dict[str, ScenarioConfig] = {
     "base": ScenarioConfig(),
-    "high_demand": ScenarioConfig(name="high_demand", demand_multiplier=1.5, urgent_rate_per_hour=1.8),
+    "high_demand": ScenarioConfig(name="high_demand", demand_multiplier=1.875, urgent_rate_per_hour=1.8),  # 1.5x base
     "high_breakdown": ScenarioConfig(name="high_breakdown", breakdown_prob_per_trip=0.08),
     "heavy_traffic": ScenarioConfig(
         name="heavy_traffic", traffic_p_congest=0.25, traffic_p_clear=0.15, congestion_multiplier=2.0
