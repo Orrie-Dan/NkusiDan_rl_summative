@@ -6,6 +6,7 @@ Usage:
     uv run main.py replay logs/demo/random_episode.json   # play back a recorded episode
     uv run main.py train dqn --total-frames 100000 --name my_run   # train (flags: training/dqn_training.py)
     uv run main.py train reinforce --total-frames 100000           # (flags: training/pg_training.py)
+    uv run main.py train a2c --total-frames 100000                 # (flags: training/pg_training.py)
     uv run main.py --help                   # list commands
 """
 
@@ -106,7 +107,7 @@ def main() -> int:
     rep.add_argument("--no-browser", action="store_true")
 
     tr = parsers["train"]
-    tr.add_argument("algo", choices=["dqn", "reinforce"], help="algorithm (A2C/PPO arrive with cards 12-13)")
+    tr.add_argument("algo", choices=["dqn", "reinforce", "a2c"], help="algorithm (PPO arrives with card 13)")
     tr.add_argument("flags", nargs=argparse.REMAINDER, help="trainer flags, e.g. --total-frames 100000 --seed 1")
 
     args = parser.parse_args()

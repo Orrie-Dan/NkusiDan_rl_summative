@@ -121,7 +121,7 @@ def test_config_validation():
 
 
 def test_cli_dispatch(tmp_path, capsys):
-    assert main([]) == 2 and main(["a2c"]) == 2
+    assert main([]) == 2 and main(["ppo"]) == 2
     assert main(["reinforce", "--name", "tiny", "--total-frames", "100", "--episodes-per-update", "1",
                  "--hidden-sizes", "8", "--eval-episodes", "1", "--baseline", "moving_average",
                  "--root", str(tmp_path)]) == 0
