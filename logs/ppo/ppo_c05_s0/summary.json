@@ -1,0 +1,62 @@
+{
+  "algo": "ppo",
+  "run_id": "ppo_c05_s0",
+  "name": "ppo_c05",
+  "seed": 0,
+  "scenario": "base",
+  "eval_mode": "sample",
+  "frames": 200704,
+  "episodes": 2681,
+  "wall_time_s": 1377.7,
+  "frames_per_s": 145.7,
+  "best_eval_return": 37.146461797560455,
+  "best_eval_frames": 163840,
+  "final_eval": {
+    "frames": 200704,
+    "eval_return_mean": 35.660354576479264,
+    "eval_return_std": 11.905545762325898,
+    "eval_tonnes_collected": 18.903672312748377,
+    "eval_overflow_bin_minutes": 267.683610391705,
+    "eval_urgent_service_rate": 0.6391666666666667,
+    "eval_greedy_return_mean": 29.436384597155033
+  },
+  "train_return_last100_mean": 37.146703243255615,
+  "model_dir": "models/pg/ppo_ppo_c05_s0",
+  "log_dir": "logs/ppo/ppo_c05_s0",
+  "config": {
+    "algo": "ppo",
+    "name": "ppo_c05",
+    "seed": 0,
+    "scenario": "base",
+    "total_frames": 200000,
+    "frames_per_batch": 1024,
+    "hidden_sizes": [
+      128,
+      128
+    ],
+    "activation": "tanh",
+    "lr": 0.0003,
+    "gamma": 0.99,
+    "max_grad_norm": 0.5,
+    "eval_every_frames": 10000,
+    "eval_episodes": 10,
+    "reward": {
+      "alpha_per_tonne": 4.0,
+      "beta_per_travel_min": 0.02,
+      "gamma_per_overflow_bin_min": 0.02,
+      "delta_per_urgent_missed": 2.0,
+      "eps_load_per_tonne": 4.0,
+      "eps_per_vehicle_not_returned": 2.0
+    },
+    "num_epochs": 4,
+    "minibatch_size": 256,
+    "clip_epsilon": 0.2,
+    "gae_lambda": 0.95,
+    "entropy_coef": 0.01,
+    "value_coef": 0.5,
+    "loss_critic_type": "smooth_l1",
+    "normalize_advantages": true,
+    "anneal_lr": false
+  },
+  "updates": 3136
+}

@@ -1,0 +1,38 @@
+{
+  "algo": "dqn",
+  "name": "dqn_c00",
+  "seed": 0,
+  "scenario": "base",
+  "total_frames": 200000,
+  "frames_per_batch": 200,
+  "hidden_sizes": [
+    128,
+    128
+  ],
+  "activation": "relu",
+  "lr": 0.0005,
+  "gamma": 0.99,
+  "max_grad_norm": 1.0,
+  "eval_every_frames": 10000,
+  "eval_episodes": 10,
+  "reward": {
+    "alpha_per_tonne": 4.0,
+    "beta_per_travel_min": 0.02,
+    "gamma_per_overflow_bin_min": 0.02,
+    "delta_per_urgent_missed": 2.0,
+    "eps_load_per_tonne": 4.0,
+    "eps_per_vehicle_not_returned": 2.0
+  },
+  "updates_per_batch": 50,
+  "buffer_size": 50000,
+  "batch_size": 128,
+  "learning_starts": 5000,
+  "eps_start": 1.0,
+  "eps_end": 0.05,
+  "eps_decay_frames": 60000,
+  "target_update": "soft",
+  "tau": 0.005,
+  "hard_update_interval": 1000,
+  "double_dqn": false,
+  "loss_function": "smooth_l1"
+}

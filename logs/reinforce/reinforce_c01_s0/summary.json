@@ -1,0 +1,60 @@
+{
+  "algo": "reinforce",
+  "run_id": "reinforce_c01_s0",
+  "name": "reinforce_c01",
+  "seed": 0,
+  "scenario": "base",
+  "eval_mode": "sample",
+  "frames": 200253,
+  "episodes": 2775,
+  "wall_time_s": 929.7,
+  "frames_per_s": 215.4,
+  "best_eval_return": 29.657487638553597,
+  "best_eval_frames": 193275,
+  "final_eval": {
+    "frames": 200253,
+    "eval_return_mean": 29.294676021828167,
+    "eval_return_std": 11.765420758097434,
+    "eval_tonnes_collected": 18.35749344422733,
+    "eval_overflow_bin_minutes": 406.7139956850394,
+    "eval_urgent_service_rate": 0.46488095238095245,
+    "eval_greedy_return_mean": -11.669250775524223
+  },
+  "train_return_last100_mean": 25.822699069976807,
+  "model_dir": "models/pg/reinforce_reinforce_c01_s0",
+  "log_dir": "logs/reinforce/reinforce_c01_s0",
+  "config": {
+    "algo": "reinforce",
+    "name": "reinforce_c01",
+    "seed": 0,
+    "scenario": "base",
+    "total_frames": 200000,
+    "frames_per_batch": 1000,
+    "hidden_sizes": [
+      128,
+      128
+    ],
+    "activation": "tanh",
+    "lr": 0.001,
+    "gamma": 0.99,
+    "max_grad_norm": 1.0,
+    "eval_every_frames": 10000,
+    "eval_episodes": 10,
+    "reward": {
+      "alpha_per_tonne": 4.0,
+      "beta_per_travel_min": 0.02,
+      "gamma_per_overflow_bin_min": 0.02,
+      "delta_per_urgent_missed": 2.0,
+      "eps_load_per_tonne": 4.0,
+      "eps_per_vehicle_not_returned": 2.0
+    },
+    "episodes_per_update": 5,
+    "baseline": "value",
+    "baseline_momentum": 0.9,
+    "value_lr": 0.001,
+    "value_steps_per_update": 5,
+    "normalize_advantages": true,
+    "entropy_coef": 0.01
+  },
+  "updates": 555
+}

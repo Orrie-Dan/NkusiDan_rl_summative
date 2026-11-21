@@ -1,0 +1,35 @@
+{
+  "algo": "ppo",
+  "name": "ppo_c07",
+  "seed": 0,
+  "scenario": "base",
+  "total_frames": 200000,
+  "frames_per_batch": 1024,
+  "hidden_sizes": [
+    128,
+    128
+  ],
+  "activation": "tanh",
+  "lr": 0.0003,
+  "gamma": 0.99,
+  "max_grad_norm": 0.5,
+  "eval_every_frames": 10000,
+  "eval_episodes": 10,
+  "reward": {
+    "alpha_per_tonne": 4.0,
+    "beta_per_travel_min": 0.02,
+    "gamma_per_overflow_bin_min": 0.02,
+    "delta_per_urgent_missed": 2.0,
+    "eps_load_per_tonne": 4.0,
+    "eps_per_vehicle_not_returned": 2.0
+  },
+  "num_epochs": 4,
+  "minibatch_size": 128,
+  "clip_epsilon": 0.2,
+  "gae_lambda": 0.95,
+  "entropy_coef": 0.05,
+  "value_coef": 0.5,
+  "loss_critic_type": "smooth_l1",
+  "normalize_advantages": true,
+  "anneal_lr": false
+}

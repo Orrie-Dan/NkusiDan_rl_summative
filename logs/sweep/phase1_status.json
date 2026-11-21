@@ -1,0 +1,322 @@
+[
+  {
+    "algo": "dqn",
+    "run_id": "dqn_c00_s0",
+    "log": "logs/sweep/runs/dqn_dqn_c00_s0.log",
+    "status": "done",
+    "returncode": 0,
+    "wall_time_s": 1707.2
+  },
+  {
+    "algo": "dqn",
+    "run_id": "dqn_c01_s0",
+    "log": "logs/sweep/runs/dqn_dqn_c01_s0.log",
+    "status": "done",
+    "returncode": 0,
+    "wall_time_s": 1697.2
+  },
+  {
+    "algo": "dqn",
+    "run_id": "dqn_c02_s0",
+    "log": "logs/sweep/runs/dqn_dqn_c02_s0.log",
+    "status": "done",
+    "returncode": 0,
+    "wall_time_s": 1716.3
+  },
+  {
+    "algo": "dqn",
+    "run_id": "dqn_c03_s0",
+    "log": "logs/sweep/runs/dqn_dqn_c03_s0.log",
+    "status": "done",
+    "returncode": 0,
+    "wall_time_s": 1750.6
+  },
+  {
+    "algo": "dqn",
+    "run_id": "dqn_c04_s0",
+    "log": "logs/sweep/runs/dqn_dqn_c04_s0.log",
+    "status": "done",
+    "returncode": 0,
+    "wall_time_s": 1732.9
+  },
+  {
+    "algo": "dqn",
+    "run_id": "dqn_c05_s0",
+    "log": "logs/sweep/runs/dqn_dqn_c05_s0.log",
+    "status": "done",
+    "returncode": 0,
+    "wall_time_s": 1752.7
+  },
+  {
+    "algo": "dqn",
+    "run_id": "dqn_c06_s0",
+    "log": "logs/sweep/runs/dqn_dqn_c06_s0.log",
+    "status": "done",
+    "returncode": 0,
+    "wall_time_s": 1688.3
+  },
+  {
+    "algo": "dqn",
+    "run_id": "dqn_c07_s0",
+    "log": "logs/sweep/runs/dqn_dqn_c07_s0.log",
+    "status": "done",
+    "returncode": 0,
+    "wall_time_s": 1621.3
+  },
+  {
+    "algo": "dqn",
+    "run_id": "dqn_c08_s0",
+    "log": "logs/sweep/runs/dqn_dqn_c08_s0.log",
+    "status": "done",
+    "returncode": 0,
+    "wall_time_s": 1624.4
+  },
+  {
+    "algo": "dqn",
+    "run_id": "dqn_c09_s0",
+    "log": "logs/sweep/runs/dqn_dqn_c09_s0.log",
+    "status": "done",
+    "returncode": 0,
+    "wall_time_s": 1628.2
+  },
+  {
+    "algo": "reinforce",
+    "run_id": "reinforce_c00_s0",
+    "log": "logs/sweep/runs/reinforce_reinforce_c00_s0.log",
+    "status": "done",
+    "returncode": 0,
+    "wall_time_s": 967.2
+  },
+  {
+    "algo": "reinforce",
+    "run_id": "reinforce_c01_s0",
+    "log": "logs/sweep/runs/reinforce_reinforce_c01_s0.log",
+    "status": "done",
+    "returncode": 0,
+    "wall_time_s": 953.7
+  },
+  {
+    "algo": "reinforce",
+    "run_id": "reinforce_c02_s0",
+    "log": "logs/sweep/runs/reinforce_reinforce_c02_s0.log",
+    "status": "done",
+    "returncode": 0,
+    "wall_time_s": 1023.2
+  },
+  {
+    "algo": "reinforce",
+    "run_id": "reinforce_c03_s0",
+    "log": "logs/sweep/runs/reinforce_reinforce_c03_s0.log",
+    "status": "done",
+    "returncode": 0,
+    "wall_time_s": 941.1
+  },
+  {
+    "algo": "reinforce",
+    "run_id": "reinforce_c04_s0",
+    "log": "logs/sweep/runs/reinforce_reinforce_c04_s0.log",
+    "status": "done",
+    "returncode": 0,
+    "wall_time_s": 914.2
+  },
+  {
+    "algo": "reinforce",
+    "run_id": "reinforce_c05_s0",
+    "log": "logs/sweep/runs/reinforce_reinforce_c05_s0.log",
+    "status": "done",
+    "returncode": 0,
+    "wall_time_s": 895.6
+  },
+  {
+    "algo": "reinforce",
+    "run_id": "reinforce_c06_s0",
+    "log": "logs/sweep/runs/reinforce_reinforce_c06_s0.log",
+    "status": "done",
+    "returncode": 0,
+    "wall_time_s": 902.0
+  },
+  {
+    "algo": "reinforce",
+    "run_id": "reinforce_c07_s0",
+    "log": "logs/sweep/runs/reinforce_reinforce_c07_s0.log",
+    "status": "done",
+    "returncode": 0,
+    "wall_time_s": 899.5
+  },
+  {
+    "algo": "reinforce",
+    "run_id": "reinforce_c08_s0",
+    "log": "logs/sweep/runs/reinforce_reinforce_c08_s0.log",
+    "status": "done",
+    "returncode": 0,
+    "wall_time_s": 949.0
+  },
+  {
+    "algo": "reinforce",
+    "run_id": "reinforce_c09_s0",
+    "log": "logs/sweep/runs/reinforce_reinforce_c09_s0.log",
+    "status": "done",
+    "returncode": 0,
+    "wall_time_s": 895.2
+  },
+  {
+    "algo": "a2c",
+    "run_id": "a2c_c00_s0",
+    "log": "logs/sweep/runs/a2c_a2c_c00_s0.log",
+    "status": "done",
+    "returncode": 0,
+    "wall_time_s": 1372.5
+  },
+  {
+    "algo": "a2c",
+    "run_id": "a2c_c01_s0",
+    "log": "logs/sweep/runs/a2c_a2c_c01_s0.log",
+    "status": "done",
+    "returncode": 0,
+    "wall_time_s": 1388.0
+  },
+  {
+    "algo": "a2c",
+    "run_id": "a2c_c02_s0",
+    "log": "logs/sweep/runs/a2c_a2c_c02_s0.log",
+    "status": "done",
+    "returncode": 0,
+    "wall_time_s": 1422.8
+  },
+  {
+    "algo": "a2c",
+    "run_id": "a2c_c03_s0",
+    "log": "logs/sweep/runs/a2c_a2c_c03_s0.log",
+    "status": "done",
+    "returncode": 0,
+    "wall_time_s": 1426.0
+  },
+  {
+    "algo": "a2c",
+    "run_id": "a2c_c04_s0",
+    "log": "logs/sweep/runs/a2c_a2c_c04_s0.log",
+    "status": "done",
+    "returncode": 0,
+    "wall_time_s": 1446.7
+  },
+  {
+    "algo": "a2c",
+    "run_id": "a2c_c05_s0",
+    "log": "logs/sweep/runs/a2c_a2c_c05_s0.log",
+    "status": "done",
+    "returncode": 0,
+    "wall_time_s": 1396.0
+  },
+  {
+    "algo": "a2c",
+    "run_id": "a2c_c06_s0",
+    "log": "logs/sweep/runs/a2c_a2c_c06_s0.log",
+    "status": "done",
+    "returncode": 0,
+    "wall_time_s": 1410.8
+  },
+  {
+    "algo": "a2c",
+    "run_id": "a2c_c07_s0",
+    "log": "logs/sweep/runs/a2c_a2c_c07_s0.log",
+    "status": "done",
+    "returncode": 0,
+    "wall_time_s": 1410.2
+  },
+  {
+    "algo": "a2c",
+    "run_id": "a2c_c08_s0",
+    "log": "logs/sweep/runs/a2c_a2c_c08_s0.log",
+    "status": "done",
+    "returncode": 0,
+    "wall_time_s": 1477.2
+  },
+  {
+    "algo": "a2c",
+    "run_id": "a2c_c09_s0",
+    "log": "logs/sweep/runs/a2c_a2c_c09_s0.log",
+    "status": "done",
+    "returncode": 0,
+    "wall_time_s": 1404.8
+  },
+  {
+    "algo": "ppo",
+    "run_id": "ppo_c00_s0",
+    "log": "logs/sweep/runs/ppo_ppo_c00_s0.log",
+    "status": "done",
+    "returncode": 0,
+    "wall_time_s": 1487.5
+  },
+  {
+    "algo": "ppo",
+    "run_id": "ppo_c01_s0",
+    "log": "logs/sweep/runs/ppo_ppo_c01_s0.log",
+    "status": "done",
+    "returncode": 0,
+    "wall_time_s": 1457.6
+  },
+  {
+    "algo": "ppo",
+    "run_id": "ppo_c02_s0",
+    "log": "logs/sweep/runs/ppo_ppo_c02_s0.log",
+    "status": "done",
+    "returncode": 0,
+    "wall_time_s": 1473.0
+  },
+  {
+    "algo": "ppo",
+    "run_id": "ppo_c03_s0",
+    "log": "logs/sweep/runs/ppo_ppo_c03_s0.log",
+    "status": "done",
+    "returncode": 0,
+    "wall_time_s": 1457.7
+  },
+  {
+    "algo": "ppo",
+    "run_id": "ppo_c04_s0",
+    "log": "logs/sweep/runs/ppo_ppo_c04_s0.log",
+    "status": "done",
+    "returncode": 0,
+    "wall_time_s": 1537.9
+  },
+  {
+    "algo": "ppo",
+    "run_id": "ppo_c05_s0",
+    "log": "logs/sweep/runs/ppo_ppo_c05_s0.log",
+    "status": "done",
+    "returncode": 0,
+    "wall_time_s": 1413.6
+  },
+  {
+    "algo": "ppo",
+    "run_id": "ppo_c06_s0",
+    "log": "logs/sweep/runs/ppo_ppo_c06_s0.log",
+    "status": "done",
+    "returncode": 0,
+    "wall_time_s": 1461.8
+  },
+  {
+    "algo": "ppo",
+    "run_id": "ppo_c07_s0",
+    "log": "logs/sweep/runs/ppo_ppo_c07_s0.log",
+    "status": "done",
+    "returncode": 0,
+    "wall_time_s": 1438.5
+  },
+  {
+    "algo": "ppo",
+    "run_id": "ppo_c08_s0",
+    "log": "logs/sweep/runs/ppo_ppo_c08_s0.log",
+    "status": "done",
+    "returncode": 0,
+    "wall_time_s": 1427.8
+  },
+  {
+    "algo": "ppo",
+    "run_id": "ppo_c09_s0",
+    "log": "logs/sweep/runs/ppo_ppo_c09_s0.log",
+    "status": "done",
+    "returncode": 0,
+    "wall_time_s": 1410.6
+  }
+]
