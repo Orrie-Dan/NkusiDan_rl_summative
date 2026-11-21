@@ -115,3 +115,14 @@ def test_child_paths_are_relative_inside_the_project(tmp_path):
     inside = sweep.PROJECT_ROOT / "logs" / "_scratch" / "x"
     assert sweep._child_path(inside).as_posix() == "logs/_scratch/x"
     assert sweep._child_path(tmp_path).is_absolute()  # outside the project: left absolute
+
+
+def test_select_by_full_name_and_suffix_runs_get_own_names():
+    picks = select_entries(configs=["dqn_c08", "reinforce_c03", "a2c_c03", "ppo_c04"])
+    assert [e.name for e in picks] == ["dqn_c08", "reinforce_c03", "a2c_c03", "ppo_c04"]
+    with pytest.raises(ValueError):
+        select_entries(configs=["dqn_c99"])
+    cfg = build_config(ALL_ENTRIES["ppo_c04"], seed=3, total_frames=600_000, name_suffix="_p2")
+    assert (cfg.name, cfg.run_id, cfg.num_epochs, cfg.total_frames) == ("ppo_c04_p2", "ppo_c04_p2_s3", 10, 600_000)
+    assert sweep.entry_for("ppo_c04_p2") is ALL_ENTRIES["ppo_c04"]
+    assert sweep.entry_for("reinforce_c03") is ALL_ENTRIES["reinforce_c03"] and sweep.entry_for("tiny") is None

@@ -17,7 +17,7 @@ Usage::
     uv run main.py sweep --list                    # print the 40 configs
     uv run main.py sweep                           # Phase 1: 40 runs, seed 0, into logs/ and models/
     uv run main.py sweep --dry-run                 # tiny budgets into logs/_scratch/sweep_dry/
-    uv run main.py sweep --algos ppo --configs c00,c03 --seeds 1,2,3,4 --tag phase2   # Phase 2 style
+    uv run main.py sweep --configs dqn_c08,ppo_c04 --seeds 0,1,2,3,4 --total-frames 600000 --name-suffix _p2 --tag phase2  # Phase 2: picked configs x 5 seeds, own run names
 """
 
 from __future__ import annotations
@@ -127,9 +127,13 @@ ALL_ENTRIES: dict[str, SweepEntry] = {e.name: e for entries in SWEEP.values() fo
 
 
 def build_config(entry: SweepEntry, seed: int = 0, total_frames: int | None = None,
-                 extra: dict[str, Any] | None = None) -> RunConfig:
-    """The full run config for ``entry``: base defaults + entry overrides + ``total_frames`` / ``extra``."""
-    kw: dict[str, Any] = {"name": entry.name, "seed": seed, **entry.overrides}
+                 extra: dict[str, Any] | None = None, name_suffix: str = "") -> RunConfig:
+    """The full run config for ``entry``: base defaults + entry overrides + ``total_frames`` / ``extra``.
+
+    ``name_suffix`` (e.g. ``_p2``) gives the run its own name, so runs of the same entry with another budget get
+    their own folders instead of colliding with (and being reported stale against) earlier runs.
+    """
+    kw: dict[str, Any] = {"name": entry.name + name_suffix, "seed": seed, **entry.overrides}
     if total_frames is not None:
         kw["total_frames"] = total_frames
     kw.update(extra or {})
@@ -145,13 +149,22 @@ def dry_run_config(entry: SweepEntry, seed: int = 0) -> RunConfig:
 
 
 def select_entries(algos: list[str] | None = None, configs: list[str] | None = None) -> list[SweepEntry]:
-    """Entries filtered by algorithm and config index (``c03`` or ``3``), in table order."""
+    """Entries filtered by algorithm and config, in table order.
+
+    A config is an index (``c03`` or ``3``, applied to every selected algorithm) or a full name (``dqn_c08``).
+    """
     algos = algos or list(ALGOS)
     unknown = set(algos) - set(ALGOS)
     if unknown:
         raise ValueError(f"unknown algos {sorted(unknown)}")
-    wanted = None if not configs else {int(c.lstrip("c")) for c in configs}
-    return [e for a in algos for e in SWEEP[a] if wanted is None or e.index in wanted]
+    if not configs:
+        return [e for a in algos for e in SWEEP[a]]
+    names = {c for c in configs if c in ALL_ENTRIES}
+    bad = [c for c in configs if c not in names and not c.lstrip("c").isdigit()]
+    if bad:
+        raise ValueError(f"unknown configs {bad}")
+    indices = {int(c.lstrip("c")) for c in configs if c not in names}
+    return [e for a in algos for e in SWEEP[a] if e.name in names or e.index in indices]
 
 
 # ----------------------------------------------------------------------------------------------------- runner
@@ -256,6 +269,12 @@ RESULT_COLUMNS = (
 )
 
 
+def entry_for(run_name: str) -> SweepEntry | None:
+    """The sweep entry a run name comes from (``ppo_c04`` or a suffixed ``ppo_c04_p2``), if any."""
+    i = run_name.find("_c")  # entry names are <algo>_cNN
+    return ALL_ENTRIES.get(run_name[: i + 4]) if i >= 0 else None
+
+
 def write_results(configs: list[RunConfig], root: Path, path: Path) -> int:
     """One CSV row per finished run (read from its summary.json). Returns the number of rows written."""
     rows = []
@@ -264,7 +283,7 @@ def write_results(configs: list[RunConfig], root: Path, path: Path) -> int:
         if job_state(cfg, root) != "done":
             continue
         s = json.loads(summary_path.read_text(encoding="utf-8"))
-        entry = ALL_ENTRIES.get(cfg.name)
+        entry = entry_for(cfg.name)
         final = s["final_eval"]
         rows.append({
             "algo": cfg.algo, "name": cfg.name, "seed": cfg.seed,
@@ -302,7 +321,9 @@ def main(argv=None) -> int:
     p = argparse.ArgumentParser(description="WasteFlow hyperparameter sweep (40 configs, card 15)")
     p.add_argument("--list", action="store_true", help="print the configs and exit")
     p.add_argument("--algos", type=lambda s: s.split(","), default=None, help="e.g. dqn,ppo (default: all)")
-    p.add_argument("--configs", type=lambda s: s.split(","), default=None, help="e.g. c00,c03 (default: all)")
+    p.add_argument("--configs", type=lambda s: s.split(","), default=None,
+                   help="indices (c00,c03) and/or full names (dqn_c08,ppo_c04) (default: all)")
+    p.add_argument("--name-suffix", default="", help="appended to run names, e.g. _p2 for Phase 2")
     p.add_argument("--seeds", type=lambda s: [int(x) for x in s.split(",")], default=[0], help="e.g. 0 or 1,2,3,4")
     p.add_argument("--total-frames", type=int, default=None, help="override the frame budget (default: 200k)")
     p.add_argument("--workers", type=int, default=min(10, os.cpu_count() or 1))
@@ -322,7 +343,8 @@ def main(argv=None) -> int:
         configs = [dry_run_config(e, s) for s in args.seeds for e in entries]
         root, tag = args.root or "logs/_scratch/sweep_dry", args.tag or "dry_run"
     else:
-        configs = [build_config(e, s, args.total_frames) for s in args.seeds for e in entries]
+        configs = [build_config(e, s, args.total_frames, name_suffix=args.name_suffix)
+                   for s in args.seeds for e in entries]
         root, tag = args.root or ".", args.tag or "phase1"
     print(f"sweep '{tag}' -> {Path(root).resolve()}")
     statuses = run_jobs(configs, root, workers=args.workers, overwrite=args.overwrite, tag=tag,
