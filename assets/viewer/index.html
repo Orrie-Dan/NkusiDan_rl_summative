@@ -12,7 +12,7 @@
 <body>
   <div id="scene"></div>
 
-  <section class="panel" id="hud">
+  <section class="panel hud" id="hud">
     <header>
       <h1>WasteFlow</h1>
       <span id="mode" class="badge">connecting…</span>
@@ -28,23 +28,30 @@
     <div id="traffic" class="chips"></div>
     <div class="section-title">Shift KPIs</div>
     <dl id="kpis" class="kpis"></dl>
+    <div class="section-title chart-title">Episode return <span id="return-value">–</span></div>
+    <canvas id="chart" aria-label="Episode return over the shift"></canvas>
   </section>
 
-  <section class="panel" id="decisions">
+  <section class="panel hud" id="decisions">
     <div class="section-title">Last decision</div>
     <div id="last-decision" class="last-decision">waiting for the first decision…</div>
     <ol id="log" class="log"></ol>
   </section>
 
-  <section class="panel" id="legend">
-    <div class="legend-row"><span class="swatch gradient"></span>Bin fill 0 → 100 %</div>
-    <div class="legend-row"><span class="swatch ring"></span>Urgent request</div>
+  <section class="panel hud" id="legend">
+    <div class="section-title">Fleet</div>
+    <div id="fleet"></div>
+    <div class="legend-static">
+    <div class="section-title">Legend</div>
+    <div class="legend-row"><span class="swatch gradient"></span>Bin fill / truck load 0 → 100 %</div>
+    <div class="legend-row"><span class="swatch ring"></span>Urgent request (label: minutes left)</div>
+    <div class="legend-row"><span class="swatch route"></span>Planned route to target</div>
     <div class="legend-row"><span class="swatch broken"></span>Broken-down truck</div>
-    <div id="fleet-legend"></div>
+    </div>
   </section>
 
-  <section class="panel" id="controls">
-    <button id="play" type="button" title="Play / pause">❚❚</button>
+  <section class="panel hud" id="controls">
+    <button id="play" type="button" title="Play / pause (space)">❚❚</button>
     <input id="scrub" type="range" min="0" max="480" step="0.5" value="0" aria-label="Simulation time">
     <select id="speed" aria-label="Playback speed">
       <option value="5">5 min/s</option>
@@ -53,8 +60,20 @@
       <option value="40">40 min/s</option>
       <option value="80">80 min/s</option>
     </select>
+    <select id="cam" aria-label="Camera" title="Camera — keys: O V T S F 1 2 3, H hides panels">
+      <option value="orbit">Free orbit</option>
+      <option value="overview">Overview</option>
+      <option value="top">Top-down</option>
+      <option value="street">Street level</option>
+      <option value="flyover">Fly-over</option>
+      <option value="follow0">Follow V0</option>
+      <option value="follow1">Follow V1</option>
+      <option value="follow2">Follow V2</option>
+    </select>
     <button id="shot" type="button" title="Save a PNG screenshot">PNG</button>
   </section>
+
+  <div id="tooltip" class="tooltip" hidden></div>
 
   <script type="module" src="viewer.js"></script>
 </body>
