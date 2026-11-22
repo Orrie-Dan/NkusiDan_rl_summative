@@ -7,10 +7,10 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from baselines.heuristics import HEURISTICS, NearestJobFirstPolicy, RandomPolicy, UrgencyFirstPolicy
+from main import HEURISTICS, NearestJobFirstPolicy, RandomPolicy, UrgencyFirstPolicy
 from environment.custom_env import REWARD_COMPONENTS, WasteFlowEnv
-from environment.simulation import SCENARIOS
-from evaluation.rollout import EVAL_SEEDS, run_episode, run_policy
+from environment.custom_env import SCENARIOS
+from environment.custom_env import EVAL_SEEDS, run_episode, run_policy
 
 KPI_KEYS = {
     "policy", "scenario", "seed", "return", "tonnes_collected", "travel_minutes", "overflow_bin_minutes",

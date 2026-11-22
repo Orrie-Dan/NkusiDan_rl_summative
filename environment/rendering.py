@@ -33,7 +33,7 @@ from typing import TYPE_CHECKING, Any
 
 import numpy as np
 
-from environment.simulation import FACILITY, N_LOCATIONS, VehicleStatus, WasteFlowSim
+from environment.custom_env import FACILITY, N_LOCATIONS, VehicleStatus, WasteFlowSim
 
 if TYPE_CHECKING:
     from environment.custom_env import WasteFlowEnv
@@ -181,7 +181,7 @@ class EpisodeRecorder:
 
 
 def record_episode(env: WasteFlowEnv, policy, seed: int) -> EpisodeRecorder:
-    """Play one episode with ``policy`` (``evaluation.rollout.Policy``) and return its recording."""
+    """Play one episode with ``policy`` (``environment.custom_env.Policy``) and return its recording."""
     rec = EpisodeRecorder()
     policy.reset(seed)
     obs, _ = env.reset(seed=seed)

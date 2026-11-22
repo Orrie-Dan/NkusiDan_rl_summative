@@ -10,7 +10,7 @@ import json
 import pytest
 import torch
 
-from training.common import load_policy
+from training import load_policy
 from training.pg_training import A2C_METRIC_COLUMNS, A2CConfig, explained_variance, main, train_a2c
 
 

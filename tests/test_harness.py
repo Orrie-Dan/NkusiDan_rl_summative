@@ -9,14 +9,14 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from baselines.heuristics import NearestJobFirstPolicy, RandomPolicy, UrgencyFirstPolicy
+from main import NearestJobFirstPolicy, RandomPolicy, UrgencyFirstPolicy
 from environment.custom_env import REWARD_COMPONENTS
-from environment.simulation import ACTION_WAIT, VehicleStatus
-from evaluation import harness
-from evaluation.harness import (
+from environment.custom_env import ACTION_WAIT, VehicleStatus
+import main as harness
+from main import (
     KPIS, bootstrap_ci, evaluate, evaluate_policy, extra_kpis, make_policy, paired_differences, summarize,
 )
-from evaluation.rollout import EVAL_SEEDS
+from environment.custom_env import EVAL_SEEDS
 
 SEEDS = EVAL_SEEDS[:4]
 
@@ -139,8 +139,8 @@ def test_evaluate_writes_csvs_and_rejects_bad_input(tmp_path):
 def test_make_policy_baselines_and_checkpoint(tmp_path):
     assert isinstance(make_policy("random"), RandomPolicy)
     assert isinstance(make_policy("nearest_job_first"), NearestJobFirstPolicy)
-    from training.common import RunConfig, mlp, save_checkpoint
-    from environment.simulation import N_ACTIONS
+    from training import RunConfig, mlp, save_checkpoint
+    from environment.custom_env import N_ACTIONS
 
     run_dir = tmp_path / "ppo_x_s0"
     run_dir.mkdir()

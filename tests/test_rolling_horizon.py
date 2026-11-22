@@ -7,11 +7,11 @@ Done-when (< 50 ms per decision, comparable to nearest-job-first on the base sce
 import numpy as np
 import pytest
 
-from baselines.rolling_horizon import RollingHorizonPolicy
+from main import RollingHorizonPolicy
 from environment.custom_env import REWARD_COMPONENTS, WasteFlowEnv
-from environment.simulation import N_LOCATIONS
-from evaluation.harness import BASELINES, evaluate_policy, make_policy
-from evaluation.rollout import EVAL_SEEDS
+from environment.custom_env import N_LOCATIONS
+from main import BASELINES, evaluate_policy, make_policy
+from environment.custom_env import EVAL_SEEDS
 
 
 def test_registered_and_plays_valid_full_episodes():

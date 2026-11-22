@@ -13,10 +13,10 @@ import torch
 from torch import nn
 from torchrl.envs.utils import check_env_specs
 
-import training.common as common
+import training as common
 from environment.custom_env import OBS_DIM, RewardConfig, WasteFlowEnv
-from environment.simulation import N_ACTIONS
-from training.common import (
+from environment.custom_env import N_ACTIONS
+from training import (
     BASE_LOG_COLUMNS,
     VALIDATION_SEEDS,
     RunConfig,
@@ -35,7 +35,7 @@ from training.common import (
     save_checkpoint,
     seed_everything,
 )
-from evaluation.rollout import EVAL_SEEDS
+from environment.custom_env import EVAL_SEEDS
 
 
 @dataclass

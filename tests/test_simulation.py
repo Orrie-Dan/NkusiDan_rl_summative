@@ -7,7 +7,7 @@ Run with ``uv run pytest tests/test_simulation.py -s`` to print the per-scenario
 import numpy as np
 import pytest
 
-from environment.simulation import (
+from environment.custom_env import (
     ACTION_DISPOSAL,
     ACTION_WAIT,
     FACILITY,

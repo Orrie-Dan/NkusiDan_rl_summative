@@ -10,9 +10,9 @@ from dataclasses import asdict
 
 import pytest
 
-from training import sweep
-from training.common import ALGOS, log_dir_for
-from training.sweep import (
+import main as sweep
+from training import ALGOS, log_dir_for
+from main import (
     ALL_ENTRIES, CONFIG_CLASSES, SWEEP, build_config, dry_run_config, job_state, run_jobs, select_entries,
 )
 
@@ -106,7 +106,7 @@ def test_one_failing_run_does_not_stop_the_others(tmp_path, monkeypatch):
 
 
 def test_cli_list_prints_all_configs(capsys):
-    assert sweep.main(["--list"]) == 0
+    assert sweep.sweep_main(["--list"]) == 0
     out = capsys.readouterr().out
     assert all(name in out for name in ALL_ENTRIES)
 

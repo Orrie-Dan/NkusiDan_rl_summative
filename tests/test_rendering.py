@@ -10,7 +10,7 @@ import json
 import numpy as np
 import pytest
 
-from baselines.heuristics import RandomPolicy, UrgencyFirstPolicy
+from main import RandomPolicy, UrgencyFirstPolicy
 from environment.custom_env import WasteFlowEnv
 from environment.rendering import (
     SCHEMA_VERSION,
@@ -21,7 +21,7 @@ from environment.rendering import (
     record_episode,
     snapshot,
 )
-from environment.simulation import FACILITY, N_LOCATIONS, N_VEHICLES
+from environment.custom_env import FACILITY, N_LOCATIONS, N_VEHICLES
 
 SNAPSHOT_KEYS = {"schema", "version", "t", "clock", "done", "zone_congested", "bins", "vehicles", "kpis", "last_decision"}
 

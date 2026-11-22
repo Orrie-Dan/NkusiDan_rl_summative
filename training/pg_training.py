@@ -1,10 +1,10 @@
 """Policy-gradient training with TorchRL: REINFORCE, A2C and PPO (Trello cards 11-13).
 
-Saves models to models/pg/<algo>_<run_id>/ and logs to logs/<algo>/<run_id>/ (see ``training.common``).
+Saves models to models/pg/<algo>_<run_id>/ and logs to logs/<algo>/<run_id>/ (see ``training/__init__.py``).
 
 REINFORCE (card 11). TorchRL has no REINFORCE loss, so it is written here by hand:
 
-- ``ProbabilisticActor`` + ``MaskedCategorical`` (``training.common.make_actor``): actions are sampled from
+- ``ProbabilisticActor`` + ``MaskedCategorical`` (``training.make_actor``): actions are sampled from
   valid actions only, and log-probabilities / entropy are over valid actions only.
 - Each update collects ``episodes_per_update`` complete episodes (shifts end by termination, never truncation).
 - Monte-Carlo reward-to-go ``G_t = sum_k gamma^k r_{t+k}``, computed per episode.
@@ -49,7 +49,7 @@ from torchrl.modules import MaskedCategorical
 from torchrl.objectives import A2CLoss, ClipPPOLoss
 from torchrl.objectives.value import GAE
 
-from training.common import (
+from training import (
     RunConfig,
     TrainingRun,
     completed_episode_returns,

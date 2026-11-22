@@ -25,13 +25,21 @@ uv run pytest
 ## Repository layout
 
 ```
-pyproject.toml, uv.lock   dependencies (pinned)
-main.py                   entry point (demo by default; subcommands: train, sweep, evaluate, plots, random-demo)
-play.py                   run the best agent with GUI + verbose terminal output
-environment/              custom Gymnasium environment (custom_env.py) and three.js bridge (rendering.py)
-training/                 dqn_training.py (DQN), pg_training.py (REINFORCE, A2C, PPO)
-models/dqn, models/pg     saved models
-logs/                     training logs and evaluation results
-assets/                   three.js viewer, figures, screenshots
-tests/                    pytest suite
+project_root/
+├── pyproject.toml, uv.lock  dependencies (pinned)
+├── README.md
+├── main.py                  CLI (train, sweep, evaluate, random-demo, replay) + baselines, evaluation harness, sweep
+├── play.py                  run the best agent with GUI + verbose terminal output
+├── environment/
+│   ├── __init__.py
+│   ├── custom_env.py        event-driven simulation core, Gymnasium environment, episode rollouts
+│   └── rendering.py         JSON state API + three.js viewer server
+├── training/
+│   ├── __init__.py          shared RL infrastructure (configs, networks, logging, checkpoints)
+│   ├── dqn_training.py      DQN
+│   └── pg_training.py       REINFORCE, A2C, PPO
+├── models/dqn, models/pg    saved models
+├── logs/                    training logs, sweep and evaluation results
+├── assets/                  three.js viewer, figures, screenshots
+└── tests/                   pytest suite
 ```

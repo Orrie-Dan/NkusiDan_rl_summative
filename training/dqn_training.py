@@ -1,6 +1,6 @@
 """DQN training with TorchRL (Trello card 10).
 
-Saves models to models/dqn/<run_id>/ and logs to logs/dqn/<run_id>/ (see ``training.common``).
+Saves models to models/dqn/<run_id>/ and logs to logs/dqn/<run_id>/ (see ``training/__init__.py``).
 
 Pieces:
 - ``QValueActor`` with ``action_mask_key``: greedy action is the argmax over *valid* actions.
@@ -30,7 +30,7 @@ from torchrl.data import LazyTensorStorage, TensorDictReplayBuffer
 from torchrl.modules import EGreedyModule
 from torchrl.objectives import DQNLoss, HardUpdate, SoftUpdate
 
-from training.common import (
+from training import (
     RunConfig,
     TrainingRun,
     completed_episode_returns,

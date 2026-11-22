@@ -20,7 +20,7 @@ from environment.custom_env import (
     obs_index,
     obs_spec_table,
 )
-from environment.simulation import ACTION_DISPOSAL, ACTION_WAIT, N_ACTIONS, SCENARIOS
+from environment.custom_env import ACTION_DISPOSAL, ACTION_WAIT, N_ACTIONS, SCENARIOS
 
 
 def random_masked(rng):

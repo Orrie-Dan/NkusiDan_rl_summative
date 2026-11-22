@@ -13,7 +13,7 @@ from torchrl.collectors import Collector
 from torchrl.objectives import ClipPPOLoss
 from torchrl.objectives.value import GAE
 
-from training.common import load_policy, make_actor, make_critic, make_env
+from training import load_policy, make_actor, make_critic, make_env
 from training.pg_training import PPO_METRIC_COLUMNS, PPOConfig, main, train_ppo
 
 

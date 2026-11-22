@@ -15,8 +15,8 @@ from torchrl.modules import QValueActor
 from torchrl.objectives import DQNLoss
 
 from environment.custom_env import OBS_DIM
-from environment.simulation import N_ACTIONS
-from training.common import load_policy, make_env
+from environment.custom_env import N_ACTIONS
+from training import load_policy, make_env
 from training.dqn_training import METRIC_COLUMNS, DQNConfig, _parse, train
 
 

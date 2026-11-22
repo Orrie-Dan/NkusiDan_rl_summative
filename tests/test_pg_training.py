@@ -12,8 +12,8 @@ import torch
 from tensordict import TensorDict
 
 from environment.custom_env import OBS_DIM
-from environment.simulation import N_ACTIONS
-from training.common import load_policy, make_actor, make_env, mlp
+from environment.custom_env import N_ACTIONS
+from training import load_policy, make_actor, make_env, mlp
 from training.pg_training import (
     REINFORCE_METRIC_COLUMNS,
     ReinforceConfig,
