@@ -1,0 +1,42 @@
+[
+  {
+    "algo": "a2c",
+    "run_id": "a2c_c03_p2_s0",
+    "log": "/kaggle/working/out/logs/sweep/runs/a2c_a2c_c03_p2_s0.log",
+    "status": "done",
+    "returncode": 0,
+    "wall_time_s": 1716.9
+  },
+  {
+    "algo": "a2c",
+    "run_id": "a2c_c03_p2_s1",
+    "log": "/kaggle/working/out/logs/sweep/runs/a2c_a2c_c03_p2_s1.log",
+    "status": "done",
+    "returncode": 0,
+    "wall_time_s": 1706.0
+  },
+  {
+    "algo": "a2c",
+    "run_id": "a2c_c03_p2_s2",
+    "log": "/kaggle/working/out/logs/sweep/runs/a2c_a2c_c03_p2_s2.log",
+    "status": "done",
+    "returncode": 0,
+    "wall_time_s": 1710.3
+  },
+  {
+    "algo": "a2c",
+    "run_id": "a2c_c03_p2_s3",
+    "log": "/kaggle/working/out/logs/sweep/runs/a2c_a2c_c03_p2_s3.log",
+    "status": "done",
+    "returncode": 0,
+    "wall_time_s": 1695.6
+  },
+  {
+    "algo": "a2c",
+    "run_id": "a2c_c03_p2_s4",
+    "log": "/kaggle/working/out/logs/sweep/runs/a2c_a2c_c03_p2_s4.log",
+    "status": "done",
+    "returncode": 0,
+    "wall_time_s": 1162.6
+  }
+]

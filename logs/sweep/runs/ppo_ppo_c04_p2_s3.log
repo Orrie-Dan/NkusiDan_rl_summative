@@ -1,0 +1,2 @@
+[92m2026-11-22 08:53:48,300 [torchrl][INFO][0m    Initialized LazyTensorStorage with torch.Size([1024]) shape[92m [END][0m
+ppo_c04_p2_s3: 600064 frames in 2281.7 s (263.0 fps) | best eval return 56.19 @ 450560 | final 50.97 | /kaggle/working/out/logs/ppo/ppo_c04_p2_s3

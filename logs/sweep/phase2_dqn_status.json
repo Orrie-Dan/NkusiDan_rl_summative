@@ -1,0 +1,42 @@
+[
+  {
+    "algo": "dqn",
+    "run_id": "dqn_c08_p2_s0",
+    "log": "/kaggle/working/out/logs/sweep/runs/dqn_dqn_c08_p2_s0.log",
+    "status": "done",
+    "returncode": 0,
+    "wall_time_s": 2416.3
+  },
+  {
+    "algo": "dqn",
+    "run_id": "dqn_c08_p2_s1",
+    "log": "/kaggle/working/out/logs/sweep/runs/dqn_dqn_c08_p2_s1.log",
+    "status": "done",
+    "returncode": 0,
+    "wall_time_s": 2409.5
+  },
+  {
+    "algo": "dqn",
+    "run_id": "dqn_c08_p2_s2",
+    "log": "/kaggle/working/out/logs/sweep/runs/dqn_dqn_c08_p2_s2.log",
+    "status": "done",
+    "returncode": 0,
+    "wall_time_s": 2413.6
+  },
+  {
+    "algo": "dqn",
+    "run_id": "dqn_c08_p2_s3",
+    "log": "/kaggle/working/out/logs/sweep/runs/dqn_dqn_c08_p2_s3.log",
+    "status": "done",
+    "returncode": 0,
+    "wall_time_s": 2411.3
+  },
+  {
+    "algo": "dqn",
+    "run_id": "dqn_c08_p2_s4",
+    "log": "/kaggle/working/out/logs/sweep/runs/dqn_dqn_c08_p2_s4.log",
+    "status": "done",
+    "returncode": 0,
+    "wall_time_s": 1592.0
+  }
+]

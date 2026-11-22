@@ -1,0 +1,42 @@
+[
+  {
+    "algo": "reinforce",
+    "run_id": "reinforce_c03_p2_s0",
+    "log": "/kaggle/working/out/logs/sweep/runs/reinforce_reinforce_c03_p2_s0.log",
+    "status": "done",
+    "returncode": 0,
+    "wall_time_s": 1868.6
+  },
+  {
+    "algo": "reinforce",
+    "run_id": "reinforce_c03_p2_s1",
+    "log": "/kaggle/working/out/logs/sweep/runs/reinforce_reinforce_c03_p2_s1.log",
+    "status": "done",
+    "returncode": 0,
+    "wall_time_s": 1875.5
+  },
+  {
+    "algo": "reinforce",
+    "run_id": "reinforce_c03_p2_s2",
+    "log": "/kaggle/working/out/logs/sweep/runs/reinforce_reinforce_c03_p2_s2.log",
+    "status": "done",
+    "returncode": 0,
+    "wall_time_s": 1868.6
+  },
+  {
+    "algo": "reinforce",
+    "run_id": "reinforce_c03_p2_s3",
+    "log": "/kaggle/working/out/logs/sweep/runs/reinforce_reinforce_c03_p2_s3.log",
+    "status": "done",
+    "returncode": 0,
+    "wall_time_s": 1864.8
+  },
+  {
+    "algo": "reinforce",
+    "run_id": "reinforce_c03_p2_s4",
+    "log": "/kaggle/working/out/logs/sweep/runs/reinforce_reinforce_c03_p2_s4.log",
+    "status": "done",
+    "returncode": 0,
+    "wall_time_s": 1129.5
+  }
+]

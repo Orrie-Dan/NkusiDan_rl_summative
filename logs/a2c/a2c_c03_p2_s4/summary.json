@@ -1,0 +1,58 @@
+{
+  "algo": "a2c",
+  "run_id": "a2c_c03_p2_s4",
+  "name": "a2c_c03_p2",
+  "seed": 4,
+  "scenario": "base",
+  "eval_mode": "sample",
+  "frames": 600000,
+  "episodes": 7317,
+  "wall_time_s": 1155.8,
+  "frames_per_s": 519.1,
+  "best_eval_return": 51.66395430741015,
+  "best_eval_frames": 582784,
+  "final_eval": {
+    "frames": 600000,
+    "eval_return_mean": 44.62729490106328,
+    "eval_return_std": 13.355309029717318,
+    "eval_tonnes_collected": 20.45574364959386,
+    "eval_overflow_bin_minutes": 170.21016491338506,
+    "eval_urgent_service_rate": 0.8691161616161616,
+    "eval_greedy_return_mean": 39.154574326365484
+  },
+  "train_return_last100_mean": 46.74960723876953,
+  "model_dir": "/kaggle/working/out/models/pg/a2c_a2c_c03_p2_s4",
+  "log_dir": "/kaggle/working/out/logs/a2c/a2c_c03_p2_s4",
+  "config": {
+    "algo": "a2c",
+    "name": "a2c_c03_p2",
+    "seed": 4,
+    "scenario": "base",
+    "total_frames": 600000,
+    "frames_per_batch": 64,
+    "hidden_sizes": [
+      128,
+      128
+    ],
+    "activation": "tanh",
+    "lr": 0.001,
+    "gamma": 0.99,
+    "max_grad_norm": 0.5,
+    "eval_every_frames": 10000,
+    "eval_episodes": 10,
+    "reward": {
+      "alpha_per_tonne": 4.0,
+      "beta_per_travel_min": 0.02,
+      "gamma_per_overflow_bin_min": 0.02,
+      "delta_per_urgent_missed": 2.0,
+      "eps_load_per_tonne": 4.0,
+      "eps_per_vehicle_not_returned": 2.0
+    },
+    "gae_lambda": 0.95,
+    "entropy_coef": 0.01,
+    "value_coef": 0.5,
+    "loss_critic_type": "smooth_l1",
+    "normalize_advantages": true
+  },
+  "updates": 9375
+}

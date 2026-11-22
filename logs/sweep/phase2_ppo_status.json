@@ -1,0 +1,42 @@
+[
+  {
+    "algo": "ppo",
+    "run_id": "ppo_c04_p2_s0",
+    "log": "/kaggle/working/out/logs/sweep/runs/ppo_ppo_c04_p2_s0.log",
+    "status": "done",
+    "returncode": 0,
+    "wall_time_s": 2291.6
+  },
+  {
+    "algo": "ppo",
+    "run_id": "ppo_c04_p2_s1",
+    "log": "/kaggle/working/out/logs/sweep/runs/ppo_ppo_c04_p2_s1.log",
+    "status": "done",
+    "returncode": 0,
+    "wall_time_s": 2286.5
+  },
+  {
+    "algo": "ppo",
+    "run_id": "ppo_c04_p2_s2",
+    "log": "/kaggle/working/out/logs/sweep/runs/ppo_ppo_c04_p2_s2.log",
+    "status": "done",
+    "returncode": 0,
+    "wall_time_s": 2287.6
+  },
+  {
+    "algo": "ppo",
+    "run_id": "ppo_c04_p2_s3",
+    "log": "/kaggle/working/out/logs/sweep/runs/ppo_ppo_c04_p2_s3.log",
+    "status": "done",
+    "returncode": 0,
+    "wall_time_s": 2289.4
+  },
+  {
+    "algo": "ppo",
+    "run_id": "ppo_c04_p2_s4",
+    "log": "/kaggle/working/out/logs/sweep/runs/ppo_ppo_c04_p2_s4.log",
+    "status": "done",
+    "returncode": 0,
+    "wall_time_s": 1467.2
+  }
+]
