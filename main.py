@@ -12,6 +12,7 @@ Usage:
     uv run main.py train reinforce --total-frames 100000           # (flags: training/pg_training.py)
     uv run main.py train a2c --total-frames 100000                 # (flags: training/pg_training.py)
     uv run main.py train ppo --total-frames 100000                 # (flags: training/pg_training.py)
+    uv run main.py plots                    # rebuild report figures + tables in assets/figures/ from logs/
     uv run main.py sweep --list             # the 40 sweep configs
     uv run main.py sweep                    # Phase 1 sweep: 40 runs in parallel, resumable
     uv run main.py sweep --dry-run          # same 40 configs with tiny budgets, into logs/_scratch/
@@ -928,6 +929,516 @@ def sweep_main(argv=None) -> int:
 
 
 # ====================================================================================================================
+# Report figures and tables (card 20)
+# ====================================================================================================================
+# ``uv run main.py plots`` rebuilds every report figure and table in ``assets/figures/`` from result files only (no
+# training, no environment rollouts):
+#
+# - ``logs/<algo>/<run_id>/train_log.csv`` and ``summary.json``: learning curves, DQN loss, PG entropy, convergence
+# - ``logs/sweep/phase1_results.csv`` + ``logs/sweep/phase1_selection/``: Phase 1 sweep (40 configs, 200k frames) and
+#   the re-scoring on selection seeds 30000-30049 that picked the Phase 2 configs
+# - ``logs/sweep/phase2_results.csv``: which runs form Phase 2 (picked config x 5 seeds, 600k frames)
+# - ``logs/eval/final/<scenario>/episodes.csv``: held-out test seeds, all scenarios (card 19)
+#
+# RL rows in the evaluation figures/tables pool the 5 Phase 2 seeds x 50 episodes; CIs are 95 % percentile bootstrap
+# over episodes (``bootstrap_ci``). Learning curves are aligned on a 10k-frame grid (evaluation runs about every 10k
+# frames); dense training columns are averaged per 10k-frame bin. Captions are written to ``captions.md``.
+
+FIG_DIR = Path("assets") / "figures"
+FINAL_EVAL_DIR = Path("logs") / "eval" / "final"
+PLOT_ALGOS = ("dqn", "ppo", "a2c", "reinforce")  # report order (Phase 2 ranking); colours follow the algorithm
+ALGO_LABEL = {"dqn": "DQN", "ppo": "PPO", "a2c": "A2C", "reinforce": "REINFORCE"}
+ALGO_COLOR = {"dqn": "#2a78d6", "ppo": "#eb6834", "a2c": "#1baf7a", "reinforce": "#eda100"}  # validated, slots 1-4
+BASELINE_ORDER = ("rolling_horizon", "urgency_first", "nearest_job_first", "random")
+BASELINE_COLOR = "#b5b3ab"
+INK, INK_2, MUTED, GRID, AXIS, SURFACE = "#0b0b0b", "#52514e", "#898781", "#e1e0d9", "#c3c2b7", "#fcfcfb"
+CURVE_STEP = 10_000
+SCENARIO_LABEL = {"base": "Base (training scenario)", "high_demand": "High demand (1.5x)",
+                  "high_breakdown": "High breakdown rate", "heavy_traffic": "Heavy traffic"}
+CONVERGENCE_THRESHOLDS = (40.0, 50.0)
+# Bookkeeping fields left out of the base-hyperparameter tables
+_NON_HYPER = {"algo", "name", "seed", "scenario", "total_frames", "eval_every_frames", "eval_episodes", "reward"}
+
+
+def _plot_style() -> None:
+    import matplotlib
+
+    matplotlib.use("Agg")
+    import matplotlib.pyplot as plt
+
+    plt.rcParams.update({
+        "figure.facecolor": SURFACE, "axes.facecolor": SURFACE, "savefig.facecolor": SURFACE,
+        "axes.edgecolor": AXIS, "axes.linewidth": 0.8, "axes.labelcolor": INK_2, "axes.titlecolor": INK,
+        "axes.titlesize": 10, "axes.titleweight": "bold", "axes.labelsize": 9, "axes.titlelocation": "left",
+        "axes.spines.top": False, "axes.spines.right": False, "axes.grid": True, "axes.axisbelow": True,
+        "grid.color": GRID, "grid.linewidth": 0.6, "xtick.color": MUTED, "ytick.color": MUTED,
+        "xtick.labelsize": 8, "ytick.labelsize": 8, "legend.fontsize": 8, "legend.frameon": False,
+        "font.size": 9, "lines.linewidth": 2.0, "figure.dpi": 100, "savefig.dpi": 200,
+    })
+
+
+def _kframes(ax) -> None:
+    ax.xaxis.set_major_formatter(lambda x, _: f"{x / 1000:.0f}k")
+    ax.set_xlabel("environment frames")
+
+
+def _binned(log: pd.DataFrame, col: str, step: int = CURVE_STEP) -> pd.Series:
+    """``col`` averaged per ``step``-frame bin, indexed by the bin's start frame (NaN rows dropped)."""
+    d = log[["frames", col]].dropna()
+    return d.groupby((d["frames"] // step) * step)[col].mean()
+
+
+def _seed_frame(runs: Sequence[pd.DataFrame], col: str) -> pd.DataFrame:
+    """One column per run, rows = frame bins present in every run."""
+    return pd.concat([_binned(r, col) for r in runs], axis=1, join="inner")
+
+
+def _band(ax, wide: pd.DataFrame, color: str, label: str) -> tuple[float, float, str]:
+    """Mean across runs as a line, min-max across runs as a band. Returns the line end for ``_end_labels``."""
+    x, mean = wide.index.to_numpy(), wide.mean(axis=1).to_numpy()
+    ax.fill_between(x, wide.min(axis=1), wide.max(axis=1), color=color, alpha=0.18, linewidth=0)
+    ax.plot(x, mean, color=color, label=label)
+    return float(x[-1]), float(mean[-1]), label
+
+
+def _end_labels(ax, ends: Sequence[tuple[float, float, str]], min_gap: float = 0.05) -> None:
+    """Direct labels at the line ends, pushed apart vertically (``min_gap`` = fraction of the y range)."""
+    lo, hi = ax.get_ylim()
+    gap = (hi - lo) * min_gap
+    ends = sorted(ends, key=lambda e: e[1])
+    ys = [e[1] for e in ends]
+    for i in range(1, len(ys)):
+        ys[i] = max(ys[i], ys[i - 1] + gap)
+    for (x, y, text), ly in zip(ends, ys):
+        ax.annotate(text, (x, y), xytext=(5, ly), textcoords=("offset points", "data"), va="center", fontsize=8,
+                    color=INK_2, annotation_clip=False)
+
+
+def _save(fig, out: Path, name: str, captions: dict[str, str], caption: str) -> None:
+    fig.savefig(out / f"{name}.png", bbox_inches="tight")
+    captions[name] = caption
+    import matplotlib.pyplot as plt
+
+    plt.close(fig)
+
+
+def load_plot_data(root: Path = Path(".")) -> dict[str, Any]:
+    """Everything the figures need, read from result files only."""
+    p1 = pd.read_csv(root / SWEEP_DIR / "phase1_results.csv")
+    p2 = pd.read_csv(root / SWEEP_DIR / "phase2_results.csv")
+    sel = pd.read_csv(root / SWEEP_DIR / "phase1_selection" / "episodes.csv")
+    phase2_names = {a: g["name"].iloc[0] for a, g in p2.groupby("algo")}
+    missing = set(PLOT_ALGOS) - set(phase2_names)
+    if missing:
+        raise FileNotFoundError(f"phase2_results.csv has no runs for {sorted(missing)}")
+
+    def log(algo: str, run_id: str) -> pd.DataFrame:
+        return pd.read_csv(log_dir_for(algo, run_id, root) / "train_log.csv")
+
+    p2_logs = {a: [log(a, f"{phase2_names[a]}_s{s}") for s in sorted(p2.loc[p2.algo == a, "seed"])]
+               for a in PLOT_ALGOS}
+    p1_logs = {a: {r["name"]: log(a, f"{r['name']}_s{r['seed']}") for _, r in p1[p1.algo == a].iterrows()}
+               for a in PLOT_ALGOS}
+    scen = [s for s in SCENARIOS if (root / FINAL_EVAL_DIR / s / "episodes.csv").exists()]
+    if "base" not in scen:
+        raise FileNotFoundError(f"no final evaluation in {root / FINAL_EVAL_DIR} (run card 19 first)")
+    ep = pd.concat([pd.read_csv(root / FINAL_EVAL_DIR / s / "episodes.csv") for s in scen], ignore_index=True)
+    ep["group"] = ep["policy"].str.replace(r"_s\d+$", "", regex=True)
+    base_cfg = {a: json.loads((log_dir_for(a, f"{a}_c00_s0", root) / "config.json").read_text(encoding="utf-8"))
+                for a in PLOT_ALGOS}
+    p2_cfg = {a: json.loads((log_dir_for(a, f"{phase2_names[a]}_s0", root) / "config.json").read_text(encoding="utf-8"))
+              for a in PLOT_ALGOS}
+    return {"p1": p1, "p2": p2, "sel": sel, "phase2_names": phase2_names, "p2_logs": p2_logs, "p1_logs": p1_logs,
+            "episodes": ep, "scenarios": scen, "base_cfg": base_cfg, "p2_cfg": p2_cfg}
+
+
+# ------------------------------------------------------------------------------------------------ tables
+
+
+def _ci_cell(m: float, lo: float, hi: float, fmt: str = ".1f") -> str:
+    return f"{m:{fmt}} [{lo:{fmt}}, {hi:{fmt}}]"
+
+
+def _policy_order(groups: Iterable[str]) -> list[str]:
+    g = set(groups)
+    return [p for p in (*BASELINE_ORDER, *PLOT_ALGOS) if p in g]
+
+
+def _policy_label(p: str) -> str:
+    return f"{ALGO_LABEL[p]} (5 seeds)" if p in ALGO_LABEL else p
+
+
+def eval_table(ep: pd.DataFrame, scenario: str) -> pd.DataFrame:
+    """Per policy group: return with CI, the seed spread for RL, and the headline KPIs (episode means)."""
+    d = ep[ep["scenario"] == scenario].copy()
+    d["terminal_penalty"] = d["r_terminal_load"] + d["r_terminal_not_returned"]
+    rows = []
+    for g in _policy_order(d["group"]):
+        x = d[d["group"] == g]
+        m, lo, hi = bootstrap_ci(x["return"])
+        seed_means = x.groupby("policy")["return"].mean()
+        rows.append({
+            "policy": _policy_label(g), "return": m, "ci_low": lo, "ci_high": hi,
+            "seed_std": float(seed_means.std(ddof=1)) if len(seed_means) > 1 else float("nan"),
+            "tonnes_collected": x["tonnes_collected"].mean(),
+            "overflow_bin_minutes": x["overflow_bin_minutes"].mean(),
+            "urgent_service_rate": x["urgent_service_rate"].mean(),
+            "vehicles_not_returned": x["vehicles_not_returned"].mean(),
+            "tonnes_left_on_trucks": x["tonnes_left_on_trucks"].mean(),
+            "terminal_penalty": x["terminal_penalty"].mean(), "episodes": len(x),
+        })
+    return pd.DataFrame(rows)
+
+
+def hyperparameter_table(data: dict[str, Any], algo: str) -> pd.DataFrame:
+    """The algorithm's 10 Phase 1 configs with their outcomes (200k frames, seed 0)."""
+    p1 = data["p1"][data["p1"].algo == algo].set_index("name")
+    sel = data["sel"]
+    picked = data["phase2_names"][algo].removesuffix("_p2")
+    rows = []
+    for e in SWEEP[algo]:
+        r = p1.loc[e.name]
+        m, lo, hi = bootstrap_ci(sel.loc[sel.policy == e.name, "return"])
+        rows.append({
+            "config": e.name, "factor": e.factor,
+            "change": ", ".join(f"{k}={v}" for k, v in e.overrides.items()) or "(base)",
+            "best_val_return": r["best_eval_return"], "final_val_return": r["final_eval_return"],
+            "selection_return": m, "selection_ci": f"[{lo:.1f}, {hi:.1f}]",
+            "final_overflow_bin_minutes": r["final_overflow_bin_minutes"],
+            "final_urgent_service_rate": r["final_urgent_service_rate"],
+            "picked": "yes" if e.name == picked else "", "rationale": e.rationale,
+        })
+    return pd.DataFrame(rows)
+
+
+def generalization_table(data: dict[str, Any]) -> pd.DataFrame:
+    """Per algorithm: best validation return (model selection) vs held-out test return, and return per scenario."""
+    p2, ep = data["p2"], data["episodes"]
+    rows = []
+    for a in PLOT_ALGOS:
+        val = p2.loc[p2.algo == a, "best_eval_return"]
+        test = ep[(ep.group == a) & (ep.scenario == "base")].groupby("policy")["return"].mean()
+        row = {"algorithm": ALGO_LABEL[a], "val_best_return": val.mean(), "test_return": test.mean(),
+               "drop": val.mean() - test.mean()}
+        for s in data["scenarios"]:
+            row[f"return_{s}"] = ep[(ep.group == a) & (ep.scenario == s)]["return"].mean()
+        rows.append(row)
+    for b in BASELINE_ORDER:
+        row = {"algorithm": b, "val_best_return": float("nan"), "test_return": float("nan"), "drop": float("nan")}
+        for s in data["scenarios"]:
+            row[f"return_{s}"] = ep[(ep.group == b) & (ep.scenario == s)]["return"].mean()
+        rows.append(row)
+    return pd.DataFrame(rows)
+
+
+def _write_table(df: pd.DataFrame, out: Path, name: str, title: str, floatfmt: str = ".2f") -> None:
+    df.to_csv(out / f"{name}.csv", index=False)
+    cols = list(df.columns)
+    lines = [f"### {title}", "", "| " + " | ".join(cols) + " |", "|" + "---|" * len(cols)]
+    for r in df.itertuples(index=False):
+        cells = [f"{v:{floatfmt}}" if isinstance(v, float) and not np.isnan(v) else ("" if isinstance(v, float)
+                 else str(v)) for v in r]
+        lines.append("| " + " | ".join(cells) + " |")
+    (out / f"{name}.md").write_text("\n".join(lines) + "\n", encoding="utf-8")
+
+
+# ----------------------------------------------------------------------------------------------- figures
+
+
+def fig_learning_curves(data, out, captions) -> None:
+    import matplotlib.pyplot as plt
+
+    fig, axes = plt.subplots(1, 2, figsize=(11, 4), sharey=True, layout="constrained")
+    for ax, col in zip(axes, ("eval_return_mean", "train_return_mean")):
+        ends = [_band(ax, _seed_frame(data["p2_logs"][a], col), ALGO_COLOR[a], ALGO_LABEL[a]) for a in PLOT_ALGOS]
+        _end_labels(ax, ends)
+    axes[0].set_title("(a) Evaluation return on 10 validation seeds")
+    axes[1].set_title("(b) Training episode return (10k-frame bins)")
+    axes[0].set_ylabel("episode return")
+    for ax in axes:
+        _kframes(ax)
+    axes[0].legend(loc="lower right")
+    _save(fig, out, "fig1_learning_curves", captions,
+          "Learning curves of the four algorithms (Phase 2: picked config, 5 seeds, 600k frames). Line: mean across "
+          "seeds; band: min-max across seeds. (a) Evaluation return on the 10 validation seeds in each agent's eval "
+          "mode (DQN greedy, policy-gradient agents sampled). (b) Return of training episodes, averaged per "
+          "10k-frame bin (includes DQN's epsilon exploration).")
+
+
+def fig_dqn_loss(data, out, captions) -> None:
+    import matplotlib.pyplot as plt
+
+    runs, c = data["p2_logs"]["dqn"], ALGO_COLOR["dqn"]
+    fig, axes = plt.subplots(1, 2, figsize=(11, 3.6), layout="constrained")
+    _band(axes[0], _seed_frame(runs, "loss"), c, "DQN")
+    _band(axes[1], _seed_frame(runs, "q_value_mean"), c, "DQN")
+    axes[0].set_yscale("log")
+    axes[0].set_title("(a) TD loss (log scale)")
+    axes[0].set_ylabel("loss per gradient step")
+    axes[1].set_title("(b) Mean predicted Q-value of sampled batches")
+    axes[1].set_ylabel("Q-value")
+    starts = data["p2_cfg"]["dqn"]["learning_starts"]
+    for ax in axes:
+        _kframes(ax)
+        ax.axvline(starts, color=MUTED, linewidth=1, linestyle=":")
+    axes[0].annotate("learning starts", (starts, 1), xycoords=("data", "axes fraction"),
+                     xytext=(4, -10), textcoords="offset points", fontsize=8, color=INK_2)
+    _save(fig, out, "fig2_dqn_objective", captions,
+          f"DQN objective ({data['phase2_names']['dqn'].removesuffix('_p2')}, 5 seeds). Line: mean across seeds; "
+          "band: min-max. (a) TD loss per gradient step, averaged per 10k-frame bin. (b) Mean Q-value predicted for "
+          "the sampled replay batches. The dotted line marks the first gradient update (learning_starts).")
+
+
+def fig_pg_entropy(data, out, captions) -> None:
+    import matplotlib.pyplot as plt
+
+    fig, ax = plt.subplots(figsize=(7.5, 4), layout="constrained")
+    ends = [_band(ax, _seed_frame(data["p2_logs"][a], "entropy"), ALGO_COLOR[a], ALGO_LABEL[a])
+            for a in ("ppo", "a2c", "reinforce")]
+    ax.axhline(np.log(17), color=MUTED, linewidth=1, linestyle=":")
+    ax.annotate("ln 17: uniform over all 17 actions (upper bound)", (0, np.log(17)), xytext=(2, -11),
+                textcoords="offset points", fontsize=8, color=INK_2)
+    ax.set_ylim(bottom=0)
+    _end_labels(ax, ends)
+    ax.set_ylabel("policy entropy (nats)")
+    ax.set_title("Policy entropy during training")
+    ax.legend(loc="upper right", bbox_to_anchor=(1, 0.9))
+    _kframes(ax)
+    _save(fig, out, "fig3_pg_entropy", captions,
+          "Entropy of the masked action distribution for the policy-gradient agents (Phase 2, 5 seeds), averaged per "
+          "10k-frame bin. Line: mean across seeds; band: min-max. The dotted line is the entropy of a uniform policy "
+          "over all 17 actions; with masking the real maximum is lower.")
+
+
+def convergence_table(data) -> pd.DataFrame:
+    """Per Phase 2 run: first evaluation frame at which validation return reaches each threshold (NaN = never)."""
+    rows = []
+    for a in PLOT_ALGOS:
+        for s, log in enumerate(data["p2_logs"][a]):
+            e = log.dropna(subset=["eval_return_mean"])
+            row = {"algorithm": ALGO_LABEL[a], "seed": s}
+            for t in CONVERGENCE_THRESHOLDS:
+                hit = e.loc[e["eval_return_mean"] >= t, "frames"]
+                row[f"frames_to_{t:g}"] = float(hit.iloc[0]) if len(hit) else float("nan")
+            last = e[e["frames"] >= e["frames"].max() - 100_000]["eval_return_mean"]
+            row["last100k_mean"], row["last100k_std"] = last.mean(), last.std(ddof=1)
+            rows.append(row)
+    return pd.DataFrame(rows)
+
+
+def fig_convergence(data, out, captions, conv: pd.DataFrame) -> None:
+    import matplotlib.pyplot as plt
+
+    fig, axes = plt.subplots(1, 3, figsize=(13, 3.8), layout="constrained")
+    max_f = max(int(log["frames"].max()) for logs in data["p2_logs"].values() for log in logs)
+    for ax, t in zip(axes[:2], CONVERGENCE_THRESHOLDS):
+        col = f"frames_to_{t:g}"
+        ticks = []
+        for i, a in enumerate(PLOT_ALGOS):
+            v = conv.loc[conv.algorithm == ALGO_LABEL[a], col].to_numpy()
+            y = np.full(v.shape, i) + np.linspace(-0.15, 0.15, len(v))
+            hit = ~np.isnan(v)
+            ax.scatter(v[hit], y[hit], s=40, color=ALGO_COLOR[a], edgecolor=SURFACE, linewidth=1.5, zorder=3)
+            if (~hit).any():
+                ax.scatter(np.full((~hit).sum(), max_f * 1.04), y[~hit], s=40, facecolor="none",
+                           edgecolor=ALGO_COLOR[a], linewidth=1.5, zorder=3)
+            ticks.append(f"{ALGO_LABEL[a]}\n{hit.sum()}/{len(v)} seeds")
+        ax.set_yticks(range(len(PLOT_ALGOS)), ticks)
+        ax.invert_yaxis()
+        ax.set_xlim(0, max_f * 1.07)
+        ax.set_title(f"({'ab'[CONVERGENCE_THRESHOLDS.index(t)]}) Frames to validation return >= {t:g}")
+        _kframes(ax)
+        ax.grid(axis="y", visible=False)
+    for a in PLOT_ALGOS:
+        wide = _seed_frame(data["p2_logs"][a], "eval_return_mean")
+        axes[2].plot(wide.index, wide.std(axis=1, ddof=1).rolling(5, min_periods=1).mean(), color=ALGO_COLOR[a],
+                     label=ALGO_LABEL[a])
+    axes[2].set_title("(c) Spread across seeds")
+    axes[2].set_ylabel("std of validation return across 5 seeds")
+    axes[2].legend(loc="upper right")
+    _kframes(axes[2])
+    _save(fig, out, "fig4_convergence", captions,
+          "Convergence and stability (Phase 2, 5 seeds per algorithm). (a, b) First evaluation at which a run's "
+          f"validation return reaches {CONVERGENCE_THRESHOLDS[0]:g} and {CONVERGENCE_THRESHOLDS[1]:g}; one dot per "
+          "seed, hollow dots at the right edge never reached it. (c) Standard deviation of the validation return "
+          "across seeds over training (5-evaluation rolling mean): lower means more stable across seeds.")
+
+
+def _hbar_ci(ax, tbl: pd.DataFrame, value: str, lo: str | None = None, hi: str | None = None) -> None:
+    y = np.arange(len(tbl))
+    colors = [ALGO_COLOR.get(next((a for a in PLOT_ALGOS if p.startswith(ALGO_LABEL[a] + " ")), ""), BASELINE_COLOR)
+              for p in tbl["policy"]]
+    ax.barh(y, tbl[value], height=0.7, color=colors, edgecolor=SURFACE, linewidth=2)
+    if lo and hi:
+        ax.errorbar(tbl[value], y, xerr=[tbl[value] - tbl[lo], tbl[hi] - tbl[value]], fmt="none", ecolor=INK_2,
+                    elinewidth=1, capsize=2.5)
+    ax.set_yticks(y, tbl["policy"])
+    ax.invert_yaxis()
+    ax.axvline(0, color=AXIS, linewidth=0.8)
+    ax.grid(axis="y", visible=False)
+
+
+def fig_generalization(data, out, captions) -> None:
+    import matplotlib.pyplot as plt
+
+    scen = data["scenarios"]
+    ncol = 2
+    nrow = int(np.ceil(len(scen) / ncol))
+    fig, axes = plt.subplots(nrow, ncol, figsize=(11, 3.4 * nrow), sharex=True, squeeze=False, layout="constrained")
+    ep = data["episodes"]
+    for ax, s in zip(axes.flat, scen):
+        tbl = eval_table(ep, s)
+        _hbar_ci(ax, tbl, "return", "ci_low", "ci_high")
+        d = ep[ep.scenario == s]
+        for i, p in enumerate(tbl["policy"]):
+            a = next((a for a in PLOT_ALGOS if p.startswith(ALGO_LABEL[a] + " ")), None)
+            if a:
+                seeds = d[d.group == a].groupby("policy")["return"].mean()
+                ax.scatter(seeds, np.full(len(seeds), i), s=12, color=INK, zorder=4, linewidth=0)
+        ax.set_title(SCENARIO_LABEL.get(s, s))
+    for ax in axes.flat[len(scen):]:
+        ax.set_visible(False)
+    for ax in axes[-1]:
+        ax.set_xlabel("mean episode return on 50 held-out seeds")
+    _save(fig, out, "fig5_generalization", captions,
+          "Held-out evaluation: mean return on the 50 test seeds (never used for training or model selection) in "
+          "the training scenario and three stress scenarios the agents never saw. Grey bars: baselines; coloured "
+          "bars: RL agents pooled over 5 seeds x 50 episodes. Whiskers: 95% bootstrap CI; black dots: per-seed means.")
+
+
+def fig_kpi_breakdown(data, out, captions) -> None:
+    import matplotlib.pyplot as plt
+
+    d = data["episodes"]
+    d = d[d.scenario == "base"].assign(terminal_penalty=lambda x: x.r_terminal_load + x.r_terminal_not_returned)
+    panels = [("tonnes_collected", "(a) Tonnes collected", "tonnes per shift"),
+              ("overflow_bin_minutes", "(b) Overflow", "bin-minutes at 100% fill"),
+              ("terminal_penalty", "(c) End-of-shift penalty", "return lost (load on board + not at depot)")]
+    fig, axes = plt.subplots(1, 3, figsize=(13, 3.6), sharey=True, layout="constrained")
+    for ax, (k, title, xl) in zip(axes, panels):
+        rows = []
+        for g in _policy_order(d.group):
+            m, lo, hi = bootstrap_ci(d.loc[d.group == g, k])
+            rows.append({"policy": _policy_label(g), "v": m, "lo": lo, "hi": hi})
+        _hbar_ci(ax, pd.DataFrame(rows), "v", "lo", "hi")
+        ax.set_title(title)
+        ax.set_xlabel(xl)
+    _save(fig, out, "fig6_kpi_breakdown", captions,
+          "Why the RL agents trail the heuristics (base scenario, 50 held-out seeds, 95% bootstrap CIs). They "
+          "collect as much or more waste (a) but let bins overflow longer (b) and end the shift with trucks away "
+          "from the depot or still loaded (c).")
+
+
+def fig_phase1_configs(data, out, captions) -> None:
+    import matplotlib.pyplot as plt
+
+    from matplotlib.lines import Line2D
+
+    fig, axes = plt.subplots(2, 2, figsize=(11, 7), sharex=True, sharey=True, layout="constrained")
+    for ax, a in zip(axes.flat, PLOT_ALGOS):
+        picked = data["phase2_names"][a].removesuffix("_p2")
+        for name, log in data["p1_logs"][a].items():
+            s = _binned(log, "eval_return_mean")
+            if name == picked:
+                continue
+            base = name.endswith("_c00")
+            ax.plot(s.index, s, color=INK_2 if base else AXIS, linewidth=1.5 if base else 1.0,
+                    linestyle="--" if base else "-", zorder=2)
+        s = _binned(data["p1_logs"][a][picked], "eval_return_mean")
+        ax.plot(s.index, s, color=ALGO_COLOR[a], zorder=3)
+        ax.set_title(f"{ALGO_LABEL[a]}: 10 configs")
+        ax.legend(handles=[Line2D([], [], color=ALGO_COLOR[a], label=f"{picked} (picked)"),
+                           Line2D([], [], color=INK_2, linestyle="--", linewidth=1.5, label="c00 (base)"),
+                           Line2D([], [], color=AXIS, linewidth=1, label="other one-factor variants")],
+                  loc="lower right")
+        _kframes(ax)
+    for ax in axes[0]:
+        ax.set_xlabel("")
+    for ax in axes[:, 0]:
+        ax.set_ylabel("validation return")
+    _save(fig, out, "fig7_phase1_configs", captions,
+          "Phase 1 sweep: validation-return curves of all 10 configs per algorithm (seed 0, 200k frames). Dashed: "
+          "base config c00; grey: the nine one-factor variants; coloured: the config picked for Phase 2 (by re-"
+          "scoring on 50 separate selection seeds, see the hyperparameter tables).")
+
+
+def fig_sensitivity(data, out, captions) -> None:
+    import matplotlib.pyplot as plt
+
+    fig, axes = plt.subplots(2, 2, figsize=(13, 8), sharex=True, layout="constrained")
+    for ax, a in zip(axes.flat, PLOT_ALGOS):
+        t = hyperparameter_table(data, a)
+        lo = t["selection_ci"].str.extract(r"\[(.*), (.*)\]").astype(float)
+        y = np.arange(len(t))
+        colors = [ALGO_COLOR[a] if p else BASELINE_COLOR for p in t["picked"]]
+        ax.barh(y, t["selection_return"], height=0.7, color=colors, edgecolor=SURFACE, linewidth=2)
+        ax.errorbar(t["selection_return"], y, xerr=[t["selection_return"] - lo[0], lo[1] - t["selection_return"]],
+                    fmt="none", ecolor=INK_2, elinewidth=1, capsize=2.5)
+        ax.set_yticks(y, [f"{c[-3:]}  {ch}" for c, ch in zip(t["config"], t["change"])], fontsize=7.5)
+        ax.invert_yaxis()
+        ax.axvline(t["selection_return"].iloc[0], color=INK_2, linewidth=1, linestyle="--")
+        ax.axvline(0, color=AXIS, linewidth=0.8)
+        ax.grid(axis="y", visible=False)
+        ax.set_title(f"{ALGO_LABEL[a]}")
+    for ax in axes[-1]:
+        ax.set_xlabel("mean return on 50 selection seeds (200k frames)")
+    _save(fig, out, "fig8_sensitivity", captions,
+          "Hyperparameter sensitivity: each Phase 1 config re-scored on 50 selection seeds (30000-30049, disjoint "
+          "from training, validation and test seeds). Coloured: picked for Phase 2; dashed line: base config c00; "
+          "whiskers: 95% bootstrap CI.")
+
+
+def make_plots(root: Path = Path("."), out: Path | None = None) -> list[Path]:
+    """Rebuild all figures and tables; returns the files written."""
+    _plot_style()
+    out = Path(out) if out is not None else root / FIG_DIR
+    tables = out / "tables"
+    tables.mkdir(parents=True, exist_ok=True)
+    data = load_plot_data(root)
+    captions: dict[str, str] = {}
+
+    fig_learning_curves(data, out, captions)
+    fig_dqn_loss(data, out, captions)
+    fig_pg_entropy(data, out, captions)
+    conv = convergence_table(data)
+    fig_convergence(data, out, captions, conv)
+    fig_generalization(data, out, captions)
+    fig_kpi_breakdown(data, out, captions)
+    fig_phase1_configs(data, out, captions)
+    fig_sensitivity(data, out, captions)
+
+    for a in PLOT_ALGOS:
+        _write_table(hyperparameter_table(data, a), tables, f"hyperparameters_{a}",
+                     f"{ALGO_LABEL[a]}: Phase 1 configs (200k frames, seed 0)")
+        cfg = {k: v for k, v in data["base_cfg"][a].items() if k not in _NON_HYPER}
+        _write_table(pd.DataFrame({"parameter": list(cfg), "value": [json.dumps(v) if isinstance(v, (list, dict))
+                                                                      else str(v) for v in cfg.values()]}),
+                     tables, f"base_config_{a}", f"{ALGO_LABEL[a]}: base config c00")
+    for s in data["scenarios"]:
+        _write_table(eval_table(data["episodes"], s), tables, f"final_eval_{s}",
+                     f"Held-out evaluation, {s} (50 test seeds; RL pooled over 5 seeds)")
+    _write_table(generalization_table(data), tables, "generalization",
+                 "Validation (model selection) vs held-out test return, and return per scenario")
+    _write_table(conv, tables, "convergence", "Frames to reach validation-return thresholds (Phase 2 runs)",
+                 floatfmt=".1f")
+
+    lines = ["# Figure captions", "", "Generated by `uv run main.py plots` from the files in `logs/`.", ""]
+    lines += [f"**{name}.png**: {text}\n" for name, text in captions.items()]
+    (out / "captions.md").write_text("\n".join(lines), encoding="utf-8")
+    return sorted(p for p in out.rglob("*") if p.is_file())
+
+
+def plots_main(argv=None) -> int:
+    p = argparse.ArgumentParser(description="Regenerate report figures and tables from logs/ (card 20)")
+    p.add_argument("--root", type=Path, default=Path("."), help="project root holding logs/")
+    p.add_argument("--out", type=Path, default=None, help=f"output directory (default: <root>/{FIG_DIR})")
+    args = p.parse_args(argv)
+    files = make_plots(args.root, args.out)
+    print(f"{len(files)} files written to {args.out or args.root / FIG_DIR}")
+    return 0
+
+
+# ====================================================================================================================
 # Command-line interface  (formerly main.py)
 # ====================================================================================================================
 
@@ -939,7 +1450,7 @@ COMMANDS = {
     "random-demo": "Run a random agent in the three.js viewer (card 05)",
     "replay": "Play back a recorded episode JSON in the three.js viewer (card 05)",
 }
-PASSTHROUGH = ("sweep", "evaluate")  # commands whose flags are parsed by their own module
+PASSTHROUGH = ("sweep", "evaluate", "plots")  # commands whose flags are parsed by their own module
 
 
 def print_status() -> None:
@@ -1036,6 +1547,8 @@ def main() -> int:
         return sweep_main(extra)
     if args.command == "evaluate":
         return evaluate_main(extra)
+    if args.command == "plots":
+        return plots_main(extra)
     if extra:
         parser.error(f"unrecognized arguments: {' '.join(extra)}")
     if args.command is None:

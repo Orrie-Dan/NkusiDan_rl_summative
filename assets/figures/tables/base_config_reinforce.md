@@ -1,0 +1,17 @@
+### REINFORCE: base config c00
+
+| parameter | value |
+|---|---|
+| frames_per_batch | 1000 |
+| hidden_sizes | [128, 128] |
+| activation | tanh |
+| lr | 0.003 |
+| gamma | 0.99 |
+| max_grad_norm | 1.0 |
+| episodes_per_update | 5 |
+| baseline | value |
+| baseline_momentum | 0.9 |
+| value_lr | 0.001 |
+| value_steps_per_update | 5 |
+| normalize_advantages | True |
+| entropy_coef | 0.01 |

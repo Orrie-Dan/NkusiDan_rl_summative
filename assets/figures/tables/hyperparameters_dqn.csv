@@ -1,0 +1,11 @@
+config,factor,change,best_val_return,final_val_return,selection_return,selection_ci,final_overflow_bin_minutes,final_urgent_service_rate,picked,rationale
+dqn_c00,base,(base),29.53715768231471,28.152009756044627,29.33769841991294,"[26.3, 32.3]",212.47070089851195,0.8332051282051282,,Base config: trainer defaults tuned in the single-algorithm cards.
+dqn_c01,lr,lr=0.0001,-8.732216951223089,-8.732216951223089,-10.484793668458249,"[-13.3, -7.6]",1218.2763449041672,0.4950396825396826,,Lower learning rate: slower but steadier Q-value fitting.
+dqn_c02,lr,lr=0.001,32.2813686612257,32.01968337304682,30.019769581120872,"[25.6, 34.0]",334.5124411872218,0.5998989898989899,,"Higher learning rate: faster progress, risk of unstable bootstrapped targets."
+dqn_c03,gamma,gamma=0.95,38.184857062493,30.540517583505913,35.14145473759209,"[32.5, 37.6]",101.5423168906236,0.678968253968254,,Shorter horizon (~20 decisions): favours immediate pickups over planning.
+dqn_c04,exploration,eps_decay_frames=20000,41.39449187739407,29.285036395291513,37.63809122835787,"[34.6, 40.3]",364.5025255934951,0.6798068598068598,,"Fast epsilon decay: exploit early, risk locking in a poor route habit."
+dqn_c05,exploration,eps_decay_frames=120000,42.363914866795255,37.18076869037864,44.31631571022214,"[40.8, 47.6]",183.18031014618475,0.7178463203463203,,Slow epsilon decay: explore for 60% of the budget.
+dqn_c06,replay,buffer_size=10000,35.85942479331188,33.92736330684737,29.894167283344256,"[26.4, 33.2]",177.96594452913382,0.8447186147186148,,"Small replay buffer: fresher, more on-policy data, less diversity."
+dqn_c07,replay,batch_size=32,-17.390759650803584,-44.57784641149949,-13.240626473654444,"[-15.7, -10.8]",1860.4681223194725,0.4928571428571429,,"Small minibatch: noisier gradients, same number of updates."
+dqn_c08,replay,learning_starts=20000,44.93746450765025,39.081363697390614,44.384060884958764,"[39.6, 48.2]",394.1151615139232,0.7565079365079365,yes,Late learning start: a more diverse buffer before the first update.
+dqn_c09,target_update,target_update=hard,39.989386499445594,18.94943807345237,36.598671342454786,"[33.6, 39.3]",363.3997483102321,0.6353968253968254,,Hard target copy every 1k gradient steps (hard_update_interval) instead of soft Polyak updates.

@@ -1,0 +1,19 @@
+parameter,value
+frames_per_batch,200
+hidden_sizes,"[128, 128]"
+activation,relu
+lr,0.0005
+gamma,0.99
+max_grad_norm,1.0
+updates_per_batch,50
+buffer_size,50000
+batch_size,128
+learning_starts,5000
+eps_start,1.0
+eps_end,0.05
+eps_decay_frames,60000
+target_update,soft
+tau,0.005
+hard_update_interval,1000
+double_dqn,False
+loss_function,smooth_l1

@@ -1,0 +1,11 @@
+config,factor,change,best_val_return,final_val_return,selection_return,selection_ci,final_overflow_bin_minutes,final_urgent_service_rate,picked,rationale
+ppo_c00,base,(base),44.86712035081356,35.0504226406968,43.144353346046174,"[40.8, 45.4]",295.8205755268101,0.6254273504273505,,Base config: trainer defaults tuned in the single-algorithm cards.
+ppo_c01,lr,lr=0.001,47.781897026471995,43.8949576445525,46.83510811222015,"[43.2, 49.8]",198.16807285686258,0.787965367965368,,"Higher learning rate: faster progress per rollout, tests the clip's protection."
+ppo_c02,clip_epsilon,clip_epsilon=0.1,38.88801477735801,36.434207584858065,35.84385617865168,"[32.1, 39.2]",197.252788000643,0.6714285714285715,,Tighter clip: more conservative policy updates.
+ppo_c03,clip_epsilon,clip_epsilon=0.3,42.50228464205985,36.875644159488274,36.85887208177557,"[33.8, 39.8]",262.40548957296113,0.5909126984126984,,Looser clip: larger policy changes per rollout.
+ppo_c04,epochs,num_epochs=10,55.95029042624907,49.85663279119952,49.293363347506826,"[46.0, 52.3]",78.88678156547498,0.8676839826839828,yes,"More epochs per rollout: better sample use, risk of overfitting a rollout."
+ppo_c05,minibatch_size,minibatch_size=256,37.146461797560455,35.660354576479264,35.17113711291488,"[32.0, 38.0]",267.683610391705,0.6391666666666667,,"Larger minibatch: half the gradient steps, smoother each."
+ppo_c06,rollout_length,frames_per_batch=2048,43.710194729086496,43.710194729086496,42.14055534280195,"[38.9, 45.0]",186.61881659552932,0.7642316017316018,,"Longer rollout (~36 shifts): fewer, better-averaged updates."
+ppo_c07,entropy,entropy_coef=0.05,39.32818129764015,37.84356370425799,31.71826985902451,"[29.2, 34.2]",296.4644299051132,0.623989898989899,,Stronger entropy bonus: more exploration.
+ppo_c08,value_coef,value_coef=1.0,42.240483282537724,38.888939223775296,41.219699483738005,"[38.6, 43.8]",285.87293083125576,0.6892712842712843,,Heavier critic loss weight.
+ppo_c09,gae_lambda,gae_lambda=0.9,46.479684070970656,42.16607772310197,43.418435881201574,"[40.7, 46.0]",212.59638962787773,0.6395238095238095,,"Lower GAE lambda: lower-variance, more biased advantages."

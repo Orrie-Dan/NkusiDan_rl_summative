@@ -1,0 +1,11 @@
+config,factor,change,best_val_return,final_val_return,selection_return,selection_ci,final_overflow_bin_minutes,final_urgent_service_rate,picked,rationale
+reinforce_c00,base,(base),25.8608615818036,20.74679506881434,19.855447478758446,"[16.8, 22.8]",473.5137126598405,0.44703102453102445,,Base config: trainer defaults tuned in the single-algorithm cards.
+reinforce_c01,lr,lr=0.001,29.657487638553597,29.294676021828167,26.211241271992854,"[23.2, 29.2]",406.7139956850394,0.46488095238095245,,Lower learning rate: smaller steps on high-variance Monte-Carlo gradients.
+reinforce_c02,lr,lr=0.01,8.599020935684326,-63.759048750917046,5.031560920689075,"[1.0, 8.8]",2574.8130499665626,0.3823809523809524,,Higher learning rate: tests whether the policy collapses early (low entropy).
+reinforce_c03,gamma,gamma=0.95,34.7359264013387,19.793754562942677,32.486039216801416,"[29.3, 35.7]",632.2124960389958,0.5482683982683982,yes,"Shorter horizon: lower-variance returns, less credit for long-term effects."
+reinforce_c04,baseline,baseline=none,17.341998279171563,-0.6675110786234422,10.010659735204925,"[6.1, 13.9]",810.5095071853166,0.4445726495726496,,"No baseline: plain REINFORCE, the variance-reduction reference."
+reinforce_c05,baseline,baseline=moving_average,22.112445630017827,-0.5639095349722222,12.599015802327528,"[9.2, 16.0]",741.5740661314588,0.4429797979797979,,Scalar moving-average baseline instead of a learned V(s).
+reinforce_c06,normalization,normalize_advantages=False,29.212541909729612,25.104029720903142,23.781580256485075,"[21.0, 26.4]",462.34622386531765,0.4629148629148629,,Raw advantages: no per-batch scale normalisation.
+reinforce_c07,entropy,entropy_coef=0.05,29.597721160804532,29.597721160804532,24.86143458408341,"[21.5, 27.9]",388.4482411294146,0.41825396825396827,,Stronger entropy bonus: keeps exploring longer.
+reinforce_c08,episodes_per_update,episodes_per_update=2,19.49880159825397,-5.957482133048314,14.137985918729548,"[10.4, 17.6]",1115.2360064311831,0.3161832611832612,,"Fewer episodes per update: more, noisier updates."
+reinforce_c09,episodes_per_update,episodes_per_update=10,30.02826506324293,30.02826506324293,27.67393960495555,"[24.7, 30.5]",365.54607916216594,0.49646825396825384,,"More episodes per update: fewer, lower-variance updates."

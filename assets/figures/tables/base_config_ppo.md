@@ -1,0 +1,19 @@
+### PPO: base config c00
+
+| parameter | value |
+|---|---|
+| frames_per_batch | 1024 |
+| hidden_sizes | [128, 128] |
+| activation | tanh |
+| lr | 0.0003 |
+| gamma | 0.99 |
+| max_grad_norm | 0.5 |
+| num_epochs | 4 |
+| minibatch_size | 128 |
+| clip_epsilon | 0.2 |
+| gae_lambda | 0.95 |
+| entropy_coef | 0.01 |
+| value_coef | 0.5 |
+| loss_critic_type | smooth_l1 |
+| normalize_advantages | True |
+| anneal_lr | False |
