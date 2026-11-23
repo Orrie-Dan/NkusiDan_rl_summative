@@ -52,7 +52,8 @@ def _num(x: float) -> float | None:
     return round(x, 4) if math.isfinite(x) else None
 
 
-def layout_message(sim: WasteFlowSim, playback_speed: float | None = None) -> dict[str, Any]:
+def layout_message(sim: WasteFlowSim, playback_speed: float | None = None,
+                   policy: str | None = None) -> dict[str, Any]:
     cfg, lay = sim.config, sim.layout
     nodes = []
     for i in range(N_LOCATIONS + 1):
@@ -79,6 +80,8 @@ def layout_message(sim: WasteFlowSim, playback_speed: float | None = None) -> di
         "vehicles": [{"id": v, "capacity_kg": cfg.vehicle_capacity_kg} for v in range(cfg.n_vehicles)],
         # None when unpaced (inf) or unknown; the viewer then keeps its own speed.
         "playback_speed": _num(playback_speed) if playback_speed is not None else None,
+        # v1.0 additive: who is driving the fleet this episode (None when not given).
+        "policy": policy,
     }
 
 
@@ -164,7 +167,7 @@ class EpisodeRecorder:
         self.frames: list[dict] = []
 
     def start(self, env: WasteFlowEnv) -> None:
-        self.layout = layout_message(env.sim)
+        self.layout = layout_message(env.sim, policy=getattr(env, "policy_label", None))
         self.frames = [snapshot(env)]
 
     def record(self, env: WasteFlowEnv) -> None:
@@ -381,7 +384,7 @@ class HumanRenderer:
         if not self._started:
             self._start()
         self.recorder.start(env)
-        self.server.publish(layout_message(env.sim, self.speed), new_episode=True)
+        self.server.publish(layout_message(env.sim, self.speed, getattr(env, "policy_label", None)), new_episode=True)
         self.server.publish(self.recorder.frames[-1])
         self._last_t = env.sim.t
 

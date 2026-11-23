@@ -832,7 +832,7 @@ function clockStr(t) {
 
 function updateHud(sf, k) {
   const L = state.layout;
-  document.getElementById('scenario').textContent = `scenario: ${L.scenario}`;
+  document.getElementById('scenario').textContent = `scenario: ${L.scenario}` + (L.policy ? ` · agent: ${L.policy}` : '');
   document.getElementById('traffic').innerHTML = sf.zone_congested
     .map((c, z) => `<span class="chip ${c ? 'congested' : ''}">${ZONE_NAMES[z] ?? z}: ${c ? 'congested' : 'clear'}</span>`)
     .join('');

@@ -290,19 +290,94 @@ def save_checkpoint(path: Path, net: nn.Module, config: RunConfig, frames: int, 
     )
 
 
-def load_policy(path: str | Path, name: str | None = None, mode: str | None = None) -> TorchPolicy:
-    """Policy from a ``model.pt`` written by any of the four trainers.
+class Agent(TorchPolicy):
+    """A trained WasteFlow agent: the integration API for anything outside training.
 
-    Acts in the checkpoint's eval mode (greedy for DQN, sampled for policy-gradient agents; checkpoints written
-    before eval modes existed are greedy) unless ``mode`` overrides it.
+    Usage::
+
+        agent = Agent.load("models/dqn/dqn_c08_p2_s3")      # a run folder or its model.pt
+        agent.reset(seed)                                   # re-seeds sampling (policy-gradient agents)
+        action = agent.act(obs)                             # obs: WasteFlowEnv observation dict -> int in [0, 17)
+
+    Serialization: ``model.pt`` holds the network ``state_dict`` plus what is needed to rebuild it (algo,
+    hidden sizes, activation, obs/action sizes, eval mode, frames, validation return); ``config.json`` next to it
+    is the full training configuration (``RunConfig``), loaded into ``Agent.config`` when present.
     """
-    ckpt = torch.load(Path(path), map_location="cpu", weights_only=True)
-    if ckpt["obs_dim"] != OBS_DIM or ckpt["n_actions"] != N_ACTIONS:
-        raise ValueError(f"checkpoint was trained for obs_dim={ckpt['obs_dim']}, n_actions={ckpt['n_actions']}")
-    net = mlp(N_ACTIONS, ckpt["hidden_sizes"], ckpt["activation"])
-    net.load_state_dict(ckpt["state_dict"])
-    net.eval()
-    return TorchPolicy(net, name=name or ckpt["algo"], mode=mode or ckpt.get("eval_mode", "greedy"))
+
+    def __init__(self, net: nn.Module, name: str = "agent", mode: str = "greedy", algo: str = "",
+                 config: dict[str, Any] | None = None, frames: int | None = None,
+                 eval_return: float | None = None, path: Path | None = None) -> None:
+        super().__init__(net, name=name, mode=mode)
+        self.algo = algo
+        self.config = config or {}
+        self.frames = frames
+        self.eval_return = eval_return
+        self.path = path
+
+    @classmethod
+    def load(cls, path: str | Path, name: str | None = None, mode: str | None = None) -> Agent:
+        """Agent from a ``model.pt`` (or a folder holding one) written by any of the four trainers.
+
+        Acts in the checkpoint's eval mode (greedy for DQN, sampled for policy-gradient agents; checkpoints
+        written before eval modes existed are greedy) unless ``mode`` overrides it.
+        """
+        path = Path(path)
+        if path.is_dir():
+            path = path / "model.pt"
+        ckpt = torch.load(path, map_location="cpu", weights_only=True)
+        if ckpt["obs_dim"] != OBS_DIM or ckpt["n_actions"] != N_ACTIONS:
+            raise ValueError(f"checkpoint was trained for obs_dim={ckpt['obs_dim']}, n_actions={ckpt['n_actions']}")
+        net = mlp(N_ACTIONS, ckpt["hidden_sizes"], ckpt["activation"])
+        net.load_state_dict(ckpt["state_dict"])
+        net.eval()
+        cfg_path = path.parent / "config.json"
+        config = json.loads(cfg_path.read_text(encoding="utf-8")) if cfg_path.is_file() else None
+        return cls(net, name=name or ckpt["algo"], mode=mode or ckpt.get("eval_mode", "greedy"), algo=ckpt["algo"],
+                   config=config, frames=ckpt.get("frames"), eval_return=ckpt.get("eval_return"), path=path)
+
+
+def load_policy(path: str | Path, name: str | None = None, mode: str | None = None) -> Agent:
+    """``Agent.load`` (kept for existing callers)."""
+    return Agent.load(path, name=name, mode=mode)
+
+
+PHASE2_RESULTS = Path("logs") / "sweep" / "phase2_results.csv"
+PHASE2_SELECTION = Path("logs") / "sweep" / "phase2_selection" / "episodes.csv"
+# 50 model-selection seeds, disjoint from training (0+), validation (VALIDATION_SEEDS) and test (EVAL_SEEDS) seeds.
+# Phase 1 configs and the best Phase 2 checkpoint per algorithm are both picked by mean return on these seeds.
+SELECTION_SEEDS = tuple(range(30_000, 30_050))
+
+
+def phase2_runs(root: str | Path = ".") -> dict[str, Path]:
+    """``{"<algo>_s<seed>": model.pt path}`` for every Phase 2 run listed in ``logs/sweep/phase2_results.csv``."""
+    root = Path(root)
+    with open(root / PHASE2_RESULTS, newline="", encoding="utf-8") as f:
+        rows = list(csv.DictReader(f))
+    return {f"{r['algo']}_s{r['seed']}": model_dir_for(r["algo"], f"{r['name']}_s{r['seed']}", root) / "model.pt"
+            for r in rows}
+
+
+def best_checkpoint(algo: str, root: str | Path = ".") -> Path:
+    """``model.pt`` of the Phase 2 run of ``algo`` with the highest mean return on the 50 selection seeds.
+
+    Scores come from ``logs/sweep/phase2_selection/episodes.csv`` (written by
+    ``uv run main.py evaluate --policies phase2 --selection``), never from the test seeds, so the choice is fixed by
+    committed results and needs no training. The validation return logged during training is not used: it is the
+    best point of a noisy curve measured on only 10 episodes.
+    """
+    root = Path(root)
+    runs = {label: path for label, path in phase2_runs(root).items() if label.startswith(f"{algo}_s")}
+    if not runs:
+        raise ValueError(f"no Phase 2 runs for {algo!r} in {root / PHASE2_RESULTS}")
+    scores: dict[str, list[float]] = {}
+    with open(root / PHASE2_SELECTION, newline="", encoding="utf-8") as f:
+        for r in csv.DictReader(f):
+            if r["policy"] in runs:
+                scores.setdefault(r["policy"], []).append(float(r["return"]))
+    missing = sorted(set(runs) - set(scores))
+    if missing:
+        raise ValueError(f"no selection scores for {', '.join(missing)} in {root / PHASE2_SELECTION}")
+    return runs[max(scores, key=lambda k: sum(scores[k]) / len(scores[k]))]
 
 
 # ----------------------------------------------------------------------------------------------- training run

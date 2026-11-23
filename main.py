@@ -5,7 +5,8 @@ Layout (the brief's mandated structure): ``environment/`` is the world (simulati
 and this file holds the comparison baselines, the evaluation harness, the hyperparameter sweep and the CLI.
 
 Usage:
-    uv run main.py                          # status (the best-agent demo comes in card 21)
+    uv run main.py                          # best trained agent (DQN) in the three.js viewer, same as play.py
+    uv run main.py play --algo all          # all four trained agents one after another (flags: play.py)
     uv run main.py random-demo              # random agent in the three.js viewer (live, in the browser)
     uv run main.py replay logs/demo/random_episode.json   # play back a recorded episode
     uv run main.py train dqn --total-frames 100000 --name my_run   # train (flags: training/dqn_training.py)
@@ -563,15 +564,28 @@ def format_summary(summary: pd.DataFrame, kpis: Sequence[str] = KPIS) -> str:
 def evaluate_main(argv=None) -> int:
     p = argparse.ArgumentParser(description="Evaluate policies on the 50 fixed eval seeds (card 16)")
     p.add_argument("--policies", type=lambda s: s.split(","), default=list(BASELINES),
-                   help="comma-separated baseline names and/or [label=]path/to/model.pt (default: all baselines)")
+                   help="comma-separated baseline names and/or [label=]path/to/model.pt, or 'phase2' for all 20 "
+                        "Phase 2 checkpoints (default: all baselines)")
     p.add_argument("--scenarios", default="base", help=f"comma-separated, or 'all' ({', '.join(SCENARIOS)})")
     p.add_argument("--episodes", type=int, default=len(EVAL_SEEDS), help="first N eval seeds (default: all 50)")
     p.add_argument("--reference", default=DEFAULT_REFERENCE, help="policy for paired differences ('' to skip)")
+    p.add_argument("--selection", action="store_true",
+                   help="use the first N model-selection seeds (30000+) instead of the test seeds")
     p.add_argument("--out", type=Path, default=DEFAULT_OUT)
     args = p.parse_args(argv)
 
     scenarios = list(SCENARIOS) if args.scenarios == "all" else args.scenarios.split(",")
-    seeds = EVAL_SEEDS[: args.episodes]
+    if "phase2" in args.policies:
+        from training import phase2_runs
+
+        i = args.policies.index("phase2")
+        args.policies[i:i + 1] = [f"{label}={path}" for label, path in phase2_runs().items()]
+    if args.selection:
+        from training import SELECTION_SEEDS
+
+        seeds = list(SELECTION_SEEDS[: args.episodes])
+    else:
+        seeds = EVAL_SEEDS[: args.episodes]
     try:
         res = evaluate(args.policies, scenarios, seeds, args.reference or None, args.out)
     except ValueError as exc:  # bad policy spec, duplicate name or unknown scenario
@@ -1443,6 +1457,7 @@ def plots_main(argv=None) -> int:
 # ====================================================================================================================
 
 COMMANDS = {
+    "play": "Play the best trained agent(s) in the three.js viewer (card 21; flags: play.py --help)",
     "train": "Train one algorithm (card 10-13)",
     "sweep": "Run the 40-config hyperparameter sweep (card 15)",
     "evaluate": "Evaluate agents and baselines on fixed seeds (card 16)",
@@ -1450,7 +1465,7 @@ COMMANDS = {
     "random-demo": "Run a random agent in the three.js viewer (card 05)",
     "replay": "Play back a recorded episode JSON in the three.js viewer (card 05)",
 }
-PASSTHROUGH = ("sweep", "evaluate", "plots")  # commands whose flags are parsed by their own module
+PASSTHROUGH = ("play", "sweep", "evaluate", "plots")  # commands whose flags are parsed by their own module
 
 
 def print_status() -> None:
@@ -1462,7 +1477,7 @@ def print_status() -> None:
     print("WasteFlow - Intelligent Waste Operations & Fleet Optimization")
     print(f"python {sys.version.split()[0]} | torch {torch.__version__} | torchrl {torchrl.__version__} "
           f"| tensordict {tensordict.__version__} | gymnasium {gymnasium.__version__}")
-    print("Available now: random-demo, replay. The trained-agent demo is not implemented yet (card 21).")
+    print("Playing the best trained agent (`uv run main.py --help` lists the other commands).")
 
 
 def random_demo(args: argparse.Namespace) -> int:
@@ -1543,6 +1558,14 @@ def main() -> int:
 
     # passthrough commands get every flag (REMAINDER cannot capture flags that come first)
     args, extra = parser.parse_known_args()
+    if args.command in (None, "play"):
+        import play
+
+        if args.command is None:
+            if extra:
+                parser.error(f"unrecognized arguments: {' '.join(extra)}")
+            print_status()
+        return play.main(extra)
     if args.command == "sweep":
         return sweep_main(extra)
     if args.command == "evaluate":
@@ -1551,9 +1574,6 @@ def main() -> int:
         return plots_main(extra)
     if extra:
         parser.error(f"unrecognized arguments: {' '.join(extra)}")
-    if args.command is None:
-        print_status()
-        return 0
     if args.command == "random-demo":
         return random_demo(args)
     if args.command == "replay":

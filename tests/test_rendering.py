@@ -11,7 +11,7 @@ import numpy as np
 import pytest
 
 from main import RandomPolicy, UrgencyFirstPolicy
-from environment.custom_env import WasteFlowEnv
+from environment.custom_env import run_episode, WasteFlowEnv
 from environment.rendering import (
     SCHEMA_VERSION,
     VIEWER_DIR,
@@ -206,3 +206,35 @@ def test_human_render_mode_streams_and_records_an_episode(tmp_path):
 def test_save_episode_requires_human_mode():
     with pytest.raises(RuntimeError):
         WasteFlowEnv().save_episode("x.json")
+
+
+def test_policy_label_reaches_the_layout_and_the_saved_episode(tmp_path):
+    assert layout_message(WasteFlowEnv().sim)["policy"] is None  # optional, additive v1.0 field
+    env = WasteFlowEnv(
+        render_mode="human",
+        render_options={"port": 0, "speed": float("inf"), "open_browser": False, "wait_for_client_s": 0},
+    )
+    try:
+        policy = UrgencyFirstPolicy()
+        run_episode(env, policy, 4)  # passes the policy name through reset(options={"policy": ...})
+        assert _read_events(env._renderer.server, 1)[0]["policy"] == policy.name
+        saved = json.loads(env.save_episode(tmp_path / "ep.json").read_text(encoding="utf-8"))
+        assert saved["layout"]["policy"] == policy.name
+    finally:
+        env.close()
+
+
+def test_play_runs_all_four_trained_agents_headless(tmp_path, capsys):
+    import play
+
+    args = play.parse_args(["--algo", "all", "--speed", "0", "--no-browser", "--wait", "0", "--gap", "0",
+                            "--hold", "0", "--port", "0", "--quiet", "--record-dir", str(tmp_path)])
+    rows = play.play(args)
+    assert [r["policy"].split()[0] for r in rows] == ["DQN", "REINFORCE", "A2C", "PPO"]
+    assert all(r["seed"] == play.DEMO_SEED and r["scenario"] == "base" for r in rows)
+    for algo, row in zip(play.ALGOS, rows):
+        ep = json.loads((tmp_path / f"{algo}_episode.json").read_text(encoding="utf-8"))
+        assert ep["layout"]["policy"] == row["policy"]
+        assert ep["frames"][-1]["kpis"]["decisions"] == row["decisions"]
+    out = capsys.readouterr().out
+    assert f"KPI summary (base, seed {play.DEMO_SEED})" in out and all(r["policy"] in out for r in rows)

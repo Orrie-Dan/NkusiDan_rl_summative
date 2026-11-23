@@ -6,6 +6,7 @@ Done-when: a dummy run writes the full model and log directories.
 import csv
 import json
 from dataclasses import dataclass
+from pathlib import Path
 
 import numpy as np
 import pytest
@@ -17,10 +18,12 @@ import training as common
 from environment.custom_env import OBS_DIM, RewardConfig, WasteFlowEnv
 from environment.custom_env import N_ACTIONS
 from training import (
+    Agent,
     BASE_LOG_COLUMNS,
     VALIDATION_SEEDS,
     RunConfig,
     TorchPolicy,
+    best_checkpoint,
     TrainingRun,
     dummy_run,
     load_policy,
@@ -36,6 +39,8 @@ from training import (
     seed_everything,
 )
 from environment.custom_env import EVAL_SEEDS
+
+ROOT = Path(__file__).resolve().parents[1]
 
 
 @dataclass
@@ -85,6 +90,56 @@ def test_saved_best_model_loads_as_a_valid_greedy_policy(dummy):
         a = policy.act(obs, env)
         assert obs["action_mask"][a]
         obs, _, done, _, _ = env.step(a)
+
+
+def test_agent_load_api_from_run_folder_carries_config_and_metadata(dummy):
+    root, summary = dummy
+    run_dir = root / "models" / "pg" / "ppo_dummy_s0"
+    agent = Agent.load(run_dir)  # a folder resolves to its model.pt
+    assert isinstance(agent, TorchPolicy) and agent.path == run_dir / "model.pt"
+    assert agent.algo == "ppo" and agent.mode == "sample" and agent.name == "ppo"
+    assert agent.config == json.loads((run_dir / "config.json").read_text(encoding="utf-8"))
+    assert agent.eval_return == pytest.approx(summary["best_eval_return"], abs=1e-5)
+    obs, _ = WasteFlowEnv().reset(seed=2)
+    agent.reset(2)
+    a = agent.act(obs)  # env argument is optional
+    agent.reset(2)
+    assert agent.act(obs) == a and obs["action_mask"][a]
+    assert type(load_policy(run_dir / "model.pt")) is Agent
+
+
+def test_best_checkpoint_picks_highest_selection_seed_mean_not_validation_return(tmp_path):
+    sweep = tmp_path / "logs" / "sweep"
+    (sweep / "phase2_selection").mkdir(parents=True)
+    with open(sweep / "phase2_results.csv", "w", newline="", encoding="utf-8") as f:
+        w = csv.writer(f)
+        w.writerow(["algo", "name", "seed", "best_eval_return"])
+        # s0 has the best validation return but the worst selection score: selection must win
+        w.writerows([("dqn", "dqn_c08_p2", 0, 99.0), ("dqn", "dqn_c08_p2", 3, 50.0), ("dqn", "dqn_c08_p2", 4, 50.0),
+                     ("ppo", "ppo_c04_p2", 1, 70.0), ("a2c", "a2c_c03_p2", 0, 60.0)])
+    with open(sweep / "phase2_selection" / "episodes.csv", "w", newline="", encoding="utf-8") as f:
+        w = csv.writer(f)
+        w.writerow(["policy", "seed", "return"])
+        w.writerows([("dqn_s0", 30000, 10.0), ("dqn_s0", 30001, 12.0), ("dqn_s3", 30000, 30.0), ("dqn_s3", 30001, 50.0),
+                     ("dqn_s4", 30000, 41.0), ("dqn_s4", 30001, 41.0), ("ppo_s1", 30000, 5.0), ("random", 30000, 99.0)])
+    assert best_checkpoint("dqn", tmp_path) == tmp_path / "models" / "dqn" / "dqn_c08_p2_s4" / "model.pt"
+    assert best_checkpoint("ppo", tmp_path) == tmp_path / "models" / "pg" / "ppo_ppo_c04_p2_s1" / "model.pt"
+    with pytest.raises(ValueError, match="a2c_s0"):  # listed run without selection scores
+        best_checkpoint("a2c", tmp_path)
+    with pytest.raises(ValueError, match="no Phase 2 runs"):
+        best_checkpoint("reinforce", tmp_path)
+
+
+def test_selection_seeds_are_disjoint_from_all_other_seed_sets():
+    assert len(common.SELECTION_SEEDS) == 50
+    assert not set(common.SELECTION_SEEDS) & (set(EVAL_SEEDS) | set(VALIDATION_SEEDS) | set(range(10_000)))
+
+
+@pytest.mark.parametrize("algo", ["dqn", "reinforce", "a2c", "ppo"])
+def test_committed_best_checkpoints_exist_and_load(algo):
+    path = best_checkpoint(algo, ROOT)
+    agent = Agent.load(path)
+    assert agent.algo == algo and agent.config["algo"] == algo and agent.frames > 0
 
 
 # ------------------------------------------------------------------------------------------------------ config

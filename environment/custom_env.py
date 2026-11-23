@@ -809,6 +809,7 @@ class WasteFlowEnv(gym.Env):
         self._last_decision: dict | None = None
         self._render_options = render_options or {}
         self._renderer = None  # created on the first human render
+        self.policy_label: str | None = None
 
     @property
     def episode_return(self) -> float:
@@ -829,6 +830,8 @@ class WasteFlowEnv(gym.Env):
         self._episode_return = 0.0
         self._last_line = ""
         self._last_decision = None
+        # optional label of the policy playing this episode, shown by the three.js viewer
+        self.policy_label = (options or {}).get("policy")
         obs = self._obs()
         info = {"vehicle": self.sim.deciding_vehicle, "clock": self.sim.clock_str(), "scenario": self.sim.config.name}
         if self.render_mode == "human":
@@ -990,7 +993,7 @@ class Policy(Protocol):
 def run_episode(env: WasteFlowEnv, policy: Policy, seed: int) -> dict:
     """Play one full shift and return its KPI row."""
     policy.reset(seed)
-    obs, _ = env.reset(seed=seed)
+    obs, _ = env.reset(seed=seed, options={"policy": policy.name})
     comps = dict.fromkeys(REWARD_COMPONENTS, 0.0)
     done, info = False, {}
     while not done:
