@@ -31,7 +31,7 @@ import os
 import subprocess
 import sys
 import time
-from collections.abc import Iterable, Sequence
+from collections.abc import Callable, Iterable, Sequence
 from concurrent.futures import as_completed, ThreadPoolExecutor
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -1125,6 +1125,51 @@ def hyperparameter_table(data: dict[str, Any], algo: str) -> pd.DataFrame:
     return pd.DataFrame(rows)
 
 
+def _eps_strategy(c: dict[str, Any]) -> str:
+    return f"eps-greedy {c['eps_start']:g}->{c['eps_end']:g} over {c['eps_decay_frames'] / 1000:g}k frames"
+
+
+# Report-template columns per algorithm: (column label, value from the run's full config). The DQN columns are fixed
+# by the official template; the policy-gradient ones are the controls each sweep varied (the template leaves them open).
+TEMPLATE_COLUMNS: dict[str, list[tuple[str, Callable[[dict[str, Any]], Any]]]] = {
+    "dqn": [("Learning Rate", lambda c: c["lr"]), ("Gamma", lambda c: c["gamma"]),
+            ("Replay Buffer Size", lambda c: c["buffer_size"]), ("Batch Size", lambda c: c["batch_size"]),
+            ("Exploration Strategy", _eps_strategy), ("Learning Starts", lambda c: c["learning_starts"]),
+            ("Target Update", lambda c: "hard / 1k steps" if c["target_update"] == "hard" else f"soft, tau={c['tau']:g}")],
+    "reinforce": [("Learning Rate", lambda c: c["lr"]), ("Gamma", lambda c: c["gamma"]),
+                  ("Baseline", lambda c: c["baseline"]), ("Normalize Advantages", lambda c: c["normalize_advantages"]),
+                  ("Entropy Coef", lambda c: c["entropy_coef"]),
+                  ("Episodes per Update", lambda c: c["episodes_per_update"])],
+    "a2c": [("Learning Rate", lambda c: c["lr"]), ("Rollout Length (frames)", lambda c: c["frames_per_batch"]),
+            ("Entropy Coef", lambda c: c["entropy_coef"]), ("Value Coef", lambda c: c["value_coef"]),
+            ("GAE Lambda", lambda c: c["gae_lambda"])],
+    "ppo": [("Learning Rate", lambda c: c["lr"]), ("Clip Epsilon", lambda c: c["clip_epsilon"]),
+            ("Epochs", lambda c: c["num_epochs"]), ("Minibatch Size", lambda c: c["minibatch_size"]),
+            ("Rollout Length (frames)", lambda c: c["frames_per_batch"]), ("Entropy Coef", lambda c: c["entropy_coef"]),
+            ("Value Coef", lambda c: c["value_coef"]), ("GAE Lambda", lambda c: c["gae_lambda"])],
+}
+
+
+def template_table(data: dict[str, Any], algo: str) -> pd.DataFrame:
+    """The 10 Phase 1 configs in the report template's layout: every listed hyperparameter spelled out per row, then
+    the mean reward (mean return on the 50 selection seeds, 200k frames). The varied value is marked with *."""
+    sel = data["sel"]
+    picked = data["phase2_names"][algo].removesuffix("_p2")
+    base = data["base_cfg"][algo]
+    rows = []
+    for e in SWEEP[algo]:
+        cfg = {**base, **e.overrides}
+        changed = {label for label, fn in TEMPLATE_COLUMNS[algo] if fn(cfg) != fn(base)}
+        row = {"Run": e.name.removeprefix(f"{algo}_") + (" (picked)" if e.name == picked else "")}
+        for label, fn in TEMPLATE_COLUMNS[algo]:
+            v = fn(cfg)
+            text = ("yes" if v else "no") if isinstance(v, bool) else f"{v:g}" if isinstance(v, float) else str(v)
+            row[label] = f"{text}*" if label in changed else text
+        row["Mean Reward"] = f"{sel.loc[sel.policy == e.name, 'return'].mean():.1f}"
+        rows.append(row)
+    return pd.DataFrame(rows)
+
+
 def generalization_table(data: dict[str, Any]) -> pd.DataFrame:
     """Per algorithm: best validation return (model selection) vs held-out test return, and return per scenario."""
     p2, ep = data["p2"], data["episodes"]
@@ -1169,8 +1214,13 @@ def fig_learning_curves(data, out, captions) -> None:
     axes[0].set_title("(a) Evaluation return on 10 validation seeds")
     axes[1].set_title("(b) Training episode return (10k-frame bins)")
     axes[0].set_ylabel("episode return")
+    # Frames are decisions; a shift has ~75-90 of them, so also show the (pooled, approximate) episode count on top.
+    logs = [log for runs in data["p2_logs"].values() for log in runs]
+    per_ep = sum(int(log["frames"].max()) for log in logs) / sum(int(log["episodes"].max()) for log in logs)
     for ax in axes:
         _kframes(ax)
+        top = ax.secondary_xaxis("top", functions=(lambda f: f / per_ep, lambda e: e * per_ep))
+        top.set_xlabel(f"training episodes (approx., {per_ep:.0f} frames per episode)")
     axes[0].legend(loc="lower right")
     _save(fig, out, "fig1_learning_curves", captions,
           "Learning curves of the four algorithms (Phase 2: picked config, 5 seeds, 600k frames). Line: mean across "
@@ -1234,6 +1284,9 @@ def convergence_table(data) -> pd.DataFrame:
             for t in CONVERGENCE_THRESHOLDS:
                 hit = e.loc[e["eval_return_mean"] >= t, "frames"]
                 row[f"frames_to_{t:g}"] = float(hit.iloc[0]) if len(hit) else float("nan")
+            for t in CONVERGENCE_THRESHOLDS:  # training episodes completed by then (same log row)
+                hit = e.loc[e["eval_return_mean"] >= t, "episodes"]
+                row[f"episodes_to_{t:g}"] = float(hit.iloc[0]) if len(hit) else float("nan")
             last = e[e["frames"] >= e["frames"].max() - 100_000]["eval_return_mean"]
             row["last100k_mean"], row["last100k_std"] = last.mean(), last.std(ddof=1)
             rows.append(row)
@@ -1428,12 +1481,16 @@ def make_plots(root: Path = Path("."), out: Path | None = None) -> list[Path]:
         _write_table(pd.DataFrame({"parameter": list(cfg), "value": [json.dumps(v) if isinstance(v, (list, dict))
                                                                       else str(v) for v in cfg.values()]}),
                      tables, f"base_config_{a}", f"{ALGO_LABEL[a]}: base config c00")
+    for a in PLOT_ALGOS:
+        _write_table(template_table(data, a), tables, f"template_{a}",
+                     f"{ALGO_LABEL[a]}: Phase 1 runs in the report-template layout (200k frames, seed 0; * = the value "
+                     f"changed from c00; Mean Reward = mean return on 50 selection seeds)")
     for s in data["scenarios"]:
         _write_table(eval_table(data["episodes"], s), tables, f"final_eval_{s}",
                      f"Held-out evaluation, {s} (50 test seeds; RL pooled over 5 seeds)")
     _write_table(generalization_table(data), tables, "generalization",
                  "Validation (model selection) vs held-out test return, and return per scenario")
-    _write_table(conv, tables, "convergence", "Frames to reach validation-return thresholds (Phase 2 runs)",
+    _write_table(conv, tables, "convergence", "Frames and training episodes to reach validation-return thresholds (Phase 2 runs)",
                  floatfmt=".1f")
 
     lines = ["# Figure captions", "", "Generated by `uv run main.py plots` from the files in `logs/`.", ""]
