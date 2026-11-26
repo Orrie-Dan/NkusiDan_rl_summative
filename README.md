@@ -20,7 +20,7 @@ Requires [uv](https://docs.astral.sh/uv/getting-started/installation/), which in
 and every dependency by itself:
 
 ```bash
-git clone <this repository> && cd dan_nkusi_rl_summative
+git clone https://github.com/Orrie-Dan/NkusiDan_rl_summative.git && cd NkusiDan_rl_summative
 uv sync
 uv run main.py
 ```
