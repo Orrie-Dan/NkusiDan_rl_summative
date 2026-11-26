@@ -11,8 +11,8 @@ route planner.
 *The trained DQN agent at 09:30: truck V2 heads to an urgent request at B13 while the central zone is congested.
 Left: clock, traffic, live KPIs and the episode return; right: the latest decisions with their rewards.*
 
-- Demo video: _link to be added_
-- Report (PDF): _link to be added_
+- Demo video: https://youtu.be/FC0LrU5Ku9M
+- Report (PDF): [assets/report/Summative_RL_Report_Dan_Nkusi.pdf](assets/report/Summative_RL_Report_Dan_Nkusi.pdf)
 
 ## Quick start
 
